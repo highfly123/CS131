@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配置代理时该选 SOCKS5 还是 HTTP？— 实用决策指南</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
+  --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#30363d;
+  --blue:#58a6ff; --green:#3fb950; --orange:#d29922;
+  --red:#f85149; --purple:#bc8cff; --cyan:#39d0d8;
+  --socks:#58a6ff; --http:#d29922;
+  --radius:12px;
+  --mono:'SF Mono','Cascadia Code','Fira Code',Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+[data-theme="light"]{
+  --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2;
+  --text:#1f2328; --text2:#656d76; --text3:#8b949e;
+  --border:#d0d7de;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{
+  font-family:var(--sans);
+  background:var(--bg); color:var(--text);
+  line-height:1.75;
+  transition:background .3s, color .3s;
+}
+
+.header{
+  position:fixed; top:0; left:0; right:0; height:64px;
+  background:rgba(22,27,34,0.88); backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 24px; z-index:100;
+}
+[data-theme="light"] .header{background:rgba(246,248,250,0.88)}
+.header-title{font-size:1.02rem; font-weight:600; display:flex; align-items:center; gap:10px}
+.theme-btn{
+  width:38px; height:38px; border-radius:10px;
+  background:var(--bg3); border:1px solid var(--border);
+  color:var(--text); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all .2s;
+}
+.theme-btn:hover{border-color:var(--blue); color:var(--blue)}
+
+.hero{
+  margin-top:64px;
+  padding:70px 24px 50px;
+  text-align:center;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(88,166,255,0.14), transparent 55%),
+    radial-gradient(ellipse at 80% 30%, rgba(63,185,80,0.1), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  border-bottom:1px solid var(--border);
+}
+.hero h1{
+  font-size:2.2rem; font-weight:800; line-height:1.3;
+  margin-bottom:14px;
+  max-width:820px;
+  margin-left:auto; margin-right:auto;
+}
+.hero .vs{
+  background:linear-gradient(135deg, var(--socks), var(--http));
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent;
+  font-weight:900;
+}
+.hero p{
+  color:var(--text2); font-size:1.05rem;
+  max-width:680px; margin:0 auto;
+}
+
+.container{
+  max-width:960px;
+  margin:0 auto;
+  padding:40px 24px;
+}
+
+/* Quick answer box */
+.quick-answer{
+  background:linear-gradient(135deg, rgba(63,185,80,0.15), rgba(88,166,255,0.08));
+  border:2px solid var(--green);
+  border-radius:var(--radius);
+  padding:24px 28px;
+  margin:20px 0 40px;
+}
+.quick-answer h3{
+  color:var(--green); font-size:1.25rem;
+  margin-bottom:14px;
+  display:flex; align-items:center; gap:10px;
+}
+.quick-answer p{font-size:1rem; margin-bottom:10px}
+.quick-answer .big{
+  font-size:1.15rem; font-weight:700;
+  color:var(--text); margin:14px 0;
+  padding:14px 18px;
+  background:rgba(63,185,80,0.1);
+  border-radius:8px;
+  border-left:4px solid var(--green);
+}
+
+/* Sections */
+.section{margin-bottom:50px}
+.section h2{
+  font-size:1.5rem; font-weight:700;
+  margin-bottom:20px;
+  padding-bottom:12px;
+  border-bottom:2px solid var(--border);
+  display:flex; align-items:center; gap:12px;
+}
+.section h2 .num{
+  width:38px; height:38px; border-radius:10px;
+  background:linear-gradient(135deg, var(--socks), var(--http));
+  display:inline-flex; align-items:center; justify-content:center;
+  color:#fff; font-weight:800; font-size:1rem;
+}
+.section h3{
+  font-size:1.1rem; font-weight:600;
+  margin:22px 0 12px;
+  display:flex; align-items:center; gap:10px;
+}
+.section h3::before{
+  content:''; width:4px; height:20px;
+  border-radius:2px; background:var(--blue);
+}
+.section p{margin-bottom:12px}
+
+/* Cards */
+.card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px 22px;
+  margin:14px 0;
+}
+.card h4{color:var(--orange); font-size:1rem; margin-bottom:8px}
+.card p, .card li{color:var(--text2); font-size:.93rem}
+.card ul{padding-left:22px; margin-top:6px}
+.card li{margin-bottom:5px}
+.card code{
+  font-family:var(--mono); font-size:.85em;
+  background:var(--bg3); color:var(--orange);
+  padding:2px 7px; border-radius:4px;
+}
+.card.socks{border-left:4px solid var(--socks)}
+.card.socks h4{color:var(--socks)}
+.card.http{border-left:4px solid var(--http)}
+.card.http h4{color:var(--http)}
+.card.both{border-left:4px solid var(--purple)}
+.card.both h4{color:var(--purple)}
+
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0}
+
+/* Decision tree */
+.tree{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin:20px 0;
+}
+
+/* Scenario card */
+.scenario{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:18px 22px;
+  margin:12px 0;
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  gap:16px;
+  align-items:center;
+}
+.scenario .icon{
+  font-size:1.8rem;
+  width:56px; height:56px;
+  background:var(--bg3);
+  border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+}
+.scenario .info h4{margin-bottom:4px; font-size:1rem}
+.scenario .info p{color:var(--text2); font-size:.88rem; margin:0}
+.scenario .badge{
+  padding:7px 14px;
+  border-radius:20px;
+  font-size:.82rem;
+  font-weight:700;
+  white-space:nowrap;
+}
+.scenario.pick-socks .badge{background:rgba(88,166,255,0.15); color:var(--socks); border:1px solid var(--socks)}
+.scenario.pick-http .badge{background:rgba(210,153,34,0.15); color:var(--http); border:1px solid var(--http)}
+.scenario.pick-both .badge{background:rgba(188,140,255,0.15); color:var(--purple); border:1px solid var(--purple)}
+.scenario.pick-any .badge{background:rgba(63,185,80,0.15); color:var(--green); border:1px solid var(--green)}
+
+/* Highlight box */
+.hl{
+  background:linear-gradient(135deg, rgba(88,166,255,0.1), rgba(188,140,255,0.05));
+  border:1px solid rgba(88,166,255,0.3);
+  border-radius:var(--radius);
+  padding:16px 20px;
+  margin:14px 0;
+}
+.hl h4{color:var(--blue); margin-bottom:6px}
+.hl p{color:var(--text); font-size:.95rem}
+
+.warn{
+  background:rgba(210,153,34,0.08);
+  border:1px solid rgba(210,153,34,0.35);
+  border-left:4px solid var(--orange);
+  border-radius:var(--radius);
+  padding:14px 18px;
+  margin:14px 0;
+}
+.warn h4{color:var(--orange); margin-bottom:4px; font-size:.95rem}
+.warn p{color:var(--text2); font-size:.9rem}
+
+/* Tag */
+.tag{
+  display:inline-block;
+  padding:2px 10px;
+  border-radius:20px;
+  font-size:.75rem;
+  font-weight:600;
+  margin:2px 3px 2px 0;
+}
+.tag-socks{background:rgba(88,166,255,0.15); color:var(--socks)}
+.tag-http{background:rgba(210,153,34,0.15); color:var(--http)}
+.tag-both{background:rgba(188,140,255,0.15); color:var(--purple)}
+.tag-green{background:rgba(63,185,80,0.15); color:var(--green)}
+.tag-red{background:rgba(248,81,73,0.15); color:var(--red)}
+
+/* Diagram SVG */
+.diagram{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;
+  margin:18px 0;
+  overflow-x:auto;
+}
+.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
+.diagram-caption{
+  text-align:center; color:var(--text2);
+  font-size:.85rem; margin-top:12px; font-style:italic;
+}
+
+footer{
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  padding:36px 24px;
+  text-align:center;
+  color:var(--text2);
+  font-size:.88rem;
+  margin-top:40px;
+}
+
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px}
+
+@media (max-width:700px){
+  .hero h1{font-size:1.55rem}
+  .hero{padding:50px 20px 40px}
+  .container{padding:24px 16px}
+  .grid-2{grid-template-columns:1fr}
+  .scenario{grid-template-columns:1fr; text-align:center}
+  .scenario .icon{margin:0 auto}
+  .section h2{font-size:1.25rem}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-title">
+    <span>⚙️</span>
+    <span>配置代理：SOCKS5 还是 HTTP？</span>
+  </div>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换主题">
+    <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  </button>
+</header>
+
+<section class="hero">
+  <h1>配置代理时该选 <span class="vs">SOCKS5</span> 还是 <span class="vs">HTTP/HTTPS</span>？</h1>
+  <p>一份面向实际问题的决策指南 — 到底选哪个、要不要两个都配、典型软件配哪个。</p>
+</section>
+
+<div class="container">
+
+<!-- ===== 最快答案 ===== -->
+<div class="quick-answer">
+  <h3>⚡ 30 秒快速答案</h3>
+
+  <p><strong>"到底选哪个？"</strong></p>
+  <div class="big">👉 <strong>优先选 SOCKS5</strong>，除非软件只支持 HTTP。</div>
+
+  <p><strong>"配一个还是两个都配？"</strong></p>
+  <div class="big">👉 <strong>配一个就够了。</strong>两个是<strong>同一台代理服务器</strong>开的两种接口（比如 SOCKS5 监听 1080 端口、HTTP 监听 8080 端口），选一个能用的就行。</div>
+
+  <p><strong>"为什么有两个？因为："</strong></p>
+  <ul style="margin-left:22px; color:var(--text)">
+    <li>SOCKS5 <strong>更通用</strong>：TCP、UDP、任何协议都能走</li>
+    <li>HTTP 代理 <strong>更普及</strong>：某些老软件/旧浏览器插件只认 HTTP 代理</li>
+    <li>代理工具（Clash / V2Ray / Shadowsocks 本地端）通常<strong>两种都暴露</strong>，让你按需选</li>
+  </ul>
+</div>
+
+<!-- ===== SECTION 1: 为什么配置界面通常有两个 ===== -->
+<section class="section">
+  <h2><span class="num">1</span>为什么配置界面里常常出现两个？</h2>
+
+  <p>你看到的"SOCKS5 和 HTTP/HTTPS 都需要配"这种界面，其实是个<strong>假象</strong>。真相是：</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 280" width="100%">
+      <!-- 本机 -->
+      <rect x="30" y="80" width="160" height="120" rx="10" fill="rgba(88,166,255,0.06)" stroke="#58a6ff" stroke-width="2"/>
+      <text x="110" y="105" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">你的电脑</text>
+
+      <rect x="50" y="120" width="120" height="30" rx="5" fill="#161b22" stroke="#58a6ff"/>
+      <text x="110" y="140" text-anchor="middle" fill="#e6edf3" font-size="11">浏览器</text>
+
+      <rect x="50" y="160" width="120" height="30" rx="5" fill="#161b22" stroke="#d29922"/>
+      <text x="110" y="180" text-anchor="middle" fill="#e6edf3" font-size="11">邮件 / Telegram</text>
+
+      <!-- 代理工具 -->
+      <rect x="250" y="30" width="280" height="220" rx="10" fill="rgba(188,140,255,0.06)" stroke="#bc8cff" stroke-width="2"/>
+      <text x="390" y="58" text-anchor="middle" fill="#bc8cff" font-size="13" font-weight="700">代理软件 (Clash / V2Ray 等)</text>
+      <text x="390" y="74" text-anchor="middle" fill="#8b949e" font-size="10">一个进程，同时开两个端口供本机应用连接</text>
+
+      <rect x="280" y="95" width="220" height="55" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="390" y="115" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="700">SOCKS5 端口 :1080</text>
+      <text x="390" y="133" text-anchor="middle" fill="#8b949e" font-size="10">通用，TCP+UDP</text>
+
+      <rect x="280" y="165" width="220" height="55" rx="8" fill="#161b22" stroke="#d29922" stroke-width="2"/>
+      <text x="390" y="185" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">HTTP 端口 :7890</text>
+      <text x="390" y="203" text-anchor="middle" fill="#8b949e" font-size="10">兼容性好，TCP 专用</text>
+
+      <!-- 远端 -->
+      <rect x="580" y="110" width="180" height="60" rx="10" fill="rgba(63,185,80,0.06)" stroke="#3fb950" stroke-width="2"/>
+      <text x="670" y="140" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="700">远端代理服务器</text>
+      <text x="670" y="158" text-anchor="middle" fill="#8b949e" font-size="10">只有一个，真正转发流量的</text>
+
+      <!-- 连线 -->
+      <line x1="170" y1="135" x2="280" y2="122" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="170" y1="175" x2="280" y2="192" stroke="#d29922" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="530" y1="140" x2="580" y2="140" stroke="#bc8cff" stroke-width="2" marker-end="url(#a3)"/>
+
+      <defs>
+        <marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#58a6ff"/></marker>
+        <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#d29922"/></marker>
+        <marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#bc8cff"/></marker>
+      </defs>
+    </svg>
+    <div class="diagram-caption">本地代理工具同时提供 SOCKS5 和 HTTP 两个"入口"，但背后是同一个流量通道</div>
+  </div>
+
+  <div class="hl">
+    <h4>💡 关键认知</h4>
+    <p>这两个接口是 <strong>代理软件给不同应用用的两个门</strong>——就像同一个银行大楼同时有"普通客户入口"和"VIP 客户入口"，里面其实是同一个银行。<br><br>
+    当你在一个软件里看到"SOCKS5 和 HTTP/HTTPS"两个配置项，实际上只需要<strong>选一个</strong>填进去。</p>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 2: 具体选哪个 ===== -->
+<section class="section">
+  <h2><span class="num">2</span>具体该选哪个？按场景对号入座</h2>
+
+  <h3>🎯 场景式决策</h3>
+
+  <div class="scenario pick-socks">
+    <div class="icon">🎮</div>
+    <div class="info">
+      <h4>游戏客户端 / 视频通话 / 语音应用</h4>
+      <p>Steam、Discord、Zoom、Skype、各类 MMO 游戏等</p>
+    </div>
+    <div class="badge">选 SOCKS5</div>
+  </div>
+
+  <div class="scenario pick-socks">
+    <div class="icon">📧</div>
+    <div class="info">
+      <h4>邮件客户端</h4>
+      <p>Outlook、Thunderbird、Apple Mail（SMTP/IMAP/POP3）</p>
+    </div>
+    <div class="badge">选 SOCKS5</div>
+  </div>
+
+  <div class="scenario pick-socks">
+    <div class="icon">💬</div>
+    <div class="info">
+      <h4>聊天软件</h4>
+      <p>Telegram、WhatsApp 桌面端、Slack 等</p>
+    </div>
+    <div class="badge">选 SOCKS5</div>
+  </div>
+
+  <div class="scenario pick-any">
+    <div class="icon">🌐</div>
+    <div class="info">
+      <h4>浏览器 (Chrome / Firefox / Edge)</h4>
+      <p>两者都可以。Firefox 配 SOCKS5 时建议勾选 "用代理解析 DNS"</p>
+    </div>
+    <div class="badge">任选其一</div>
+  </div>
+
+  <div class="scenario pick-http">
+    <div class="icon">🔧</div>
+    <div class="info">
+      <h4>HTTP 调试工具 / 爬虫框架</h4>
+      <p>Postman、curl、Python requests、Node.js axios 等</p>
+    </div>
+    <div class="badge">用 HTTP 常见</div>
+  </div>
+
+  <div class="scenario pick-any">
+    <div class="icon">🐙</div>
+    <div class="info">
+      <h4>Git / npm / pip / 开发工具</h4>
+      <p>命令行工具一般两种都支持，配 HTTP 更常见</p>
+    </div>
+    <div class="badge">任选其一</div>
+  </div>
+
+  <div class="scenario pick-socks">
+    <div class="icon">📥</div>
+    <div class="info">
+      <h4>下载工具 / BT 客户端</h4>
+      <p>qBittorrent、Transmission、IDM 等（BT 的 Tracker 需要 UDP）</p>
+    </div>
+    <div class="badge">选 SOCKS5</div>
+  </div>
+
+  <div class="scenario pick-http">
+    <div class="icon">🏢</div>
+    <div class="info">
+      <h4>只暴露 HTTP 接口的旧软件</h4>
+      <p>一些老旧的浏览器插件、企业软件、仅为 Web 设计的工具</p>
+    </div>
+    <div class="badge">必须 HTTP</div>
+  </div>
+
+  <div class="scenario pick-any">
+    <div class="icon">💻</div>
+    <div class="info">
+      <h4>系统全局代理（Windows/macOS 设置里）</h4>
+      <p>系统会把配置的代理应用到大部分"规矩"的 HTTP 流量</p>
+    </div>
+    <div class="badge">任选其一</div>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 3: 二选一的决策树 ===== -->
+<section class="section">
+  <h2><span class="num">3</span>不知道选哪个？决策树</h2>
+
+  <div class="tree">
+    <svg viewBox="0 0 800 480" width="100%">
+      <!-- 起点 -->
+      <rect x="300" y="20" width="200" height="50" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="400" y="45" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">要配置代理了！</text>
+      <text x="400" y="62" text-anchor="middle" fill="#8b949e" font-size="10">该选哪个？</text>
+
+      <!-- Q1: 软件只支持一种？ -->
+      <line x1="400" y1="70" x2="400" y2="90" stroke="#8b949e" stroke-width="2"/>
+      <polygon points="400,90 395,84 405,84" fill="#8b949e"/>
+      <rect x="280" y="92" width="240" height="50" rx="10" fill="#21262d" stroke="#d29922" stroke-width="2"/>
+      <text x="400" y="115" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">软件的配置界面</text>
+      <text x="400" y="132" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">支持几种代理类型？</text>
+
+      <!-- 分支：只支持 HTTP -->
+      <line x1="400" y1="142" x2="140" y2="180" stroke="#d29922" stroke-width="2"/>
+      <text x="220" y="155" text-anchor="middle" fill="#d29922" font-size="11">只支持 HTTP</text>
+      <rect x="30" y="180" width="220" height="60" rx="10" fill="rgba(210,153,34,0.15)" stroke="#d29922" stroke-width="2"/>
+      <text x="140" y="205" text-anchor="middle" fill="#d29922" font-size="13" font-weight="700">✓ 用 HTTP</text>
+      <text x="140" y="225" text-anchor="middle" fill="#8b949e" font-size="11">没的选</text>
+
+      <!-- 分支：只支持 SOCKS -->
+      <line x1="400" y1="142" x2="660" y2="180" stroke="#58a6ff" stroke-width="2"/>
+      <text x="580" y="155" text-anchor="middle" fill="#58a6ff" font-size="11">只支持 SOCKS5</text>
+      <rect x="550" y="180" width="220" height="60" rx="10" fill="rgba(88,166,255,0.15)" stroke="#58a6ff" stroke-width="2"/>
+      <text x="660" y="205" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">✓ 用 SOCKS5</text>
+      <text x="660" y="225" text-anchor="middle" fill="#8b949e" font-size="11">没的选</text>
+
+      <!-- 分支：两种都支持 -->
+      <line x1="400" y1="142" x2="400" y2="180" stroke="#bc8cff" stroke-width="2"/>
+      <polygon points="400,180 395,174 405,174" fill="#bc8cff"/>
+      <rect x="280" y="182" width="240" height="50" rx="10" fill="#21262d" stroke="#bc8cff" stroke-width="2"/>
+      <text x="400" y="205" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">两种都支持？</text>
+      <text x="400" y="222" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">需要转发 UDP 流量吗？</text>
+
+      <!-- UDP 需要 → SOCKS5 -->
+      <line x1="400" y1="232" x2="660" y2="290" stroke="#58a6ff" stroke-width="2"/>
+      <text x="570" y="253" text-anchor="middle" fill="#58a6ff" font-size="11">是（游戏/通话/BT）</text>
+      <rect x="550" y="290" width="220" height="100" rx="10" fill="rgba(88,166,255,0.15)" stroke="#58a6ff" stroke-width="2"/>
+      <text x="660" y="315" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="700">✓ 必须 SOCKS5</text>
+      <text x="660" y="340" text-anchor="middle" fill="#8b949e" font-size="11">HTTP 代理不支持 UDP</text>
+      <text x="660" y="358" text-anchor="middle" fill="#8b949e" font-size="11">游戏、语音、QUIC、DNS</text>
+      <text x="660" y="376" text-anchor="middle" fill="#8b949e" font-size="11">都需要 UDP</text>
+
+      <!-- UDP 不需要 → 再问 -->
+      <line x1="400" y1="232" x2="140" y2="290" stroke="#3fb950" stroke-width="2"/>
+      <text x="230" y="253" text-anchor="middle" fill="#3fb950" font-size="11">不需要（纯 Web）</text>
+      <rect x="30" y="290" width="220" height="100" rx="10" fill="rgba(63,185,80,0.15)" stroke="#3fb950" stroke-width="2"/>
+      <text x="140" y="315" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="700">✓ 优先 SOCKS5</text>
+      <text x="140" y="338" text-anchor="middle" fill="#8b949e" font-size="11">更通用，且能</text>
+      <text x="140" y="355" text-anchor="middle" fill="#8b949e" font-size="11">让代理远程解析 DNS</text>
+      <text x="140" y="374" text-anchor="middle" fill="#8b949e" font-size="11">(避免 DNS 泄漏)</text>
+
+      <!-- 底部总结 -->
+      <rect x="100" y="420" width="600" height="45" rx="8" fill="#161b22" stroke="#3fb950" stroke-dasharray="4,3"/>
+      <text x="400" y="440" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">📌 一句话：能选 SOCKS5 就选 SOCKS5，不能选才用 HTTP。</text>
+      <text x="400" y="456" text-anchor="middle" fill="#8b949e" font-size="10">配一个就行，不用两个都配</text>
+    </svg>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 4: 三个核心区别 ===== -->
+<section class="section">
+  <h2><span class="num">4</span>两者的核心区别</h2>
+
+  <p>如果你想真正明白<strong>为什么</strong>应该优先选 SOCKS5，这三点最关键：</p>
+
+  <div class="grid-2">
+    <div class="card socks">
+      <h4>① 能不能走 UDP 流量</h4>
+      <p><strong>SOCKS5：</strong>可以 ✓<br><strong>HTTP 代理：</strong>不可以 ✗</p>
+      <p style="margin-top:10px"><strong>影响：</strong>游戏（实时位置同步用 UDP）、语音通话（RTP/SRTP 用 UDP）、视频会议、QUIC（HTTP/3）、BT 的 Tracker、DNS 查询——这些都用 UDP。HTTP 代理根本转不了。</p>
+    </div>
+
+    <div class="card socks">
+      <h4>② DNS 解析在哪一端</h4>
+      <p><strong>SOCKS5：</strong>可以把域名发给代理，由代理端解析<br><strong>HTTP 代理：</strong>通常在本地解析，本地 ISP 能看到你的域名</p>
+      <p style="margin-top:10px"><strong>影响：</strong>使用 SOCKS5 + 远程 DNS 能避免"DNS 泄漏"；HTTP 代理几乎做不到这点。</p>
+    </div>
+
+    <div class="card http">
+      <h4>③ 支持的生态更广</h4>
+      <p><strong>SOCKS5：</strong>新软件多数支持<br><strong>HTTP 代理：</strong>几乎所有工具都支持（"最小公分母"）</p>
+      <p style="margin-top:10px"><strong>影响：</strong>遇到老旧软件、某些只认 <code>http_proxy</code> 环境变量的命令行工具时，HTTP 代理更稳妥。</p>
+    </div>
+
+    <div class="card http">
+      <h4>④ 配置复杂度</h4>
+      <p><strong>SOCKS5：</strong>填 IP、端口、(可选)用户名密码<br><strong>HTTP 代理：</strong>一样，填 IP、端口、(可选)认证</p>
+      <p style="margin-top:10px"><strong>影响：</strong>配置复杂度几乎相同。某些场景（如命令行用 <code>http_proxy</code> 环境变量）HTTP 代理写起来略方便。</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 5: 常见软件的配置选择 ===== -->
+<section class="section">
+  <h2><span class="num">5</span>常见软件配哪个</h2>
+
+  <p>下面这些是真实场景下的选择参考：</p>
+
+  <div class="card">
+    <h4>🌐 浏览器</h4>
+    <ul>
+      <li><strong>Chrome / Edge：</strong>使用系统代理，选哪个都行。SOCKS5 需通过 <code>--proxy-server=socks5://...</code> 启动参数或系统设置</li>
+      <li><strong>Firefox：</strong>设置里两者都支持。选 SOCKS5 时记得勾选 "<strong>Proxy DNS when using SOCKS v5</strong>"，避免 DNS 泄漏</li>
+      <li><strong>SwitchyOmega 之类的代理扩展：</strong>两者都支持，按喜好</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>💬 Telegram</h4>
+    <ul>
+      <li>支持 SOCKS5 和 MTProto 代理（自有协议，非 HTTP）</li>
+      <li><strong>推荐 SOCKS5</strong>——能转发它的所有 TCP/UDP 流量（语音通话需要 UDP）</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>🎮 游戏 / Steam</h4>
+    <ul>
+      <li>绝大多数游戏用 UDP 同步状态，必须 <strong>SOCKS5</strong></li>
+      <li>Steam 下载用 HTTP 协议，社区/聊天可能用其他协议——SOCKS5 能统一处理</li>
+      <li>更常见的做法是用 "<strong>系统级代理/TUN 模式</strong>"，全局接管所有流量，不在游戏里配</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>📧 邮件客户端 (Outlook/Thunderbird/Mail)</h4>
+    <ul>
+      <li>SMTP/IMAP/POP3 都是 TCP 协议，理论上 HTTP CONNECT 也能做</li>
+      <li>但邮件客户端对 SOCKS5 支持更好，<strong>选 SOCKS5</strong></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>🐙 Git / npm / pip / Cargo 等开发工具</h4>
+    <ul>
+      <li>多数用环境变量 <code>http_proxy</code> / <code>https_proxy</code>，<strong>HTTP 代理最省事</strong></li>
+      <li>Git 也支持 SOCKS5：<code>git config --global http.proxy socks5://...</code></li>
+      <li>没特殊需求时，<strong>用 HTTP 更不容易踩坑</strong></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>🐍 Python requests / Node.js axios / Postman</h4>
+    <ul>
+      <li>Postman：支持 HTTP 和 SOCKS5，按喜好</li>
+      <li>Python requests：需装 <code>pip install requests[socks]</code> 才能用 SOCKS5；HTTP 代理原生支持</li>
+      <li><strong>简单脚本：用 HTTP；复杂场景：SOCKS5</strong></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>📥 下载工具（IDM / aria2 / qBittorrent）</h4>
+    <ul>
+      <li>HTTP 下载：两者都行</li>
+      <li>BT 下载：Tracker 通信需要 UDP，<strong>必须 SOCKS5</strong></li>
+      <li>电驴等老协议：必须 SOCKS5</li>
+    </ul>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 6: 经典误区 ===== -->
+<section class="section">
+  <h2><span class="num">6</span>几个经典误区</h2>
+
+  <div class="warn">
+    <h4>❌ 误区 1："SOCKS5 更快"</h4>
+    <p>不准确。两者协议开销都很小，瓶颈通常是<strong>到远端服务器的网络质量</strong>，不是本地代理协议。日常使用感受不到差异。</p>
+  </div>
+
+  <div class="warn">
+    <h4>❌ 误区 2："SOCKS5 更安全/更隐私"</h4>
+    <p>协议本身都<strong>不加密</strong>。安全性来自你传的数据（HTTPS）和外层隧道（如 Shadowsocks）的加密。SOCKS5 只在 "DNS 不泄漏" 上有优势，这是"隐私"维度，不是"加密"维度。</p>
+  </div>
+
+  <div class="warn">
+    <h4>❌ 误区 3："两种都要配，越多越稳"</h4>
+    <p>不是。同一软件<strong>只配一个就行</strong>，两种接口是给不同应用用的不同入口。配多了不会更稳，反而可能让配置管理变混乱。</p>
+  </div>
+
+  <div class="warn">
+    <h4>❌ 误区 4："HTTPS 代理 = HTTP 代理的加密版"</h4>
+    <p>"HTTPS 代理"这个词歧义。通常指"代理处理 HTTPS 流量"（用 CONNECT 隧道），本身仍是 HTTP 协议；偶尔指"本地到代理这段用 TLS 加密"（较少见）。不是"HTTP 代理的升级版"。</p>
+  </div>
+
+  <div class="warn">
+    <h4>❌ 误区 5："1080 端口一定是 SOCKS5"</h4>
+    <p>端口只是<strong>约定</strong>。历史上 1080 常用于 SOCKS，8080/3128 常用于 HTTP，但不是规定。具体端口看你的代理工具配置界面实际监听什么。Clash 默认 SOCKS5 是 7891、HTTP 是 7890，V2Ray 默认 SOCKS5 是 1080，不完全一样。</p>
+  </div>
+</section>
+
+
+<!-- ===== SECTION 7: 终极答案 ===== -->
+<section class="section">
+  <h2><span class="num">7</span>一句话终极答案</h2>
+
+  <div class="quick-answer" style="margin:0">
+    <h3>🎯 给懒人的终极建议</h3>
+
+    <div class="big">
+      <p style="margin-bottom:10px">🥇 <strong>首选 SOCKS5</strong>——能通吃各种应用，避免 DNS 泄漏，没明显缺点</p>
+      <p style="margin-bottom:10px">🥈 <strong>仅当软件不支持 SOCKS5 时，用 HTTP</strong></p>
+      <p style="margin-bottom:0">🚫 <strong>不需要同时配两个</strong>——同一台代理，配一次就够了</p>
+    </div>
+
+    <p style="margin-top:16px">如果你实在纠结——默认填 SOCKS5。如果发现不工作，再换成 HTTP 试试。<strong>这是最省脑力的策略。</strong></p>
+  </div>
+
+  <div class="hl" style="margin-top:30px">
+    <h4>🧠 总结回顾</h4>
+    <p>
+    <strong>1. 选哪个？</strong> 优先 SOCKS5，不行再用 HTTP<br>
+    <strong>2. 配一个还是两个？</strong> 一个就够<br>
+    <strong>3. 主要区别？</strong> SOCKS5 通用（支持 UDP、避免 DNS 泄漏）；HTTP 普及度更广<br>
+    <strong>4. 什么时候必须 HTTP？</strong> 软件不支持 SOCKS5 时<br>
+    <strong>5. 什么时候必须 SOCKS5？</strong> 需要 UDP 时（游戏、通话、BT、DNS）<br>
+    </p>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <p>📚 想深入了解两种代理的协议原理？查看同系列文档 <code>socks5_vs_http_proxy.html</code></p>
+  <p style="margin-top:6px;color:var(--text3)">本文档聚焦"该如何选择"的实用问题，不涉及搭建和部署</p>
+</footer>
+
+<script>
+function toggleTheme(){
+  const html = document.documentElement;
+  const cur = html.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  const icon = document.getElementById('theme-icon');
+  if(next === 'light'){
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  } else {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+}
+</script>
+
+</body>
+</html>
