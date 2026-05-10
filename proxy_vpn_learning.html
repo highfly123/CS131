@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机场/VPN/代理服务的运行原理与协议详解</title>
+<style>
+:root{--bg-primary:#0d1117;--bg-secondary:#161b22;--bg-tertiary:#21262d;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#484f58;--border-color:#30363d;--accent-blue:#58a6ff;--accent-green:#3fb950;--accent-orange:#d29922;--accent-red:#f85149;--accent-purple:#bc8cff;--accent-cyan:#39d353;--card-shadow:0 3px 12px rgba(0,0,0,0.4);--radius:12px;--transition:0.3s ease;--font-mono:'SF Mono','Cascadia Code','Fira Code',monospace;--font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;--sidebar-width:280px}
+[data-theme="light"]{--bg-primary:#ffffff;--bg-secondary:#f6f8fa;--bg-tertiary:#eaeef2;--text-primary:#1f2328;--text-secondary:#656d76;--text-muted:#8b949e;--border-color:#d0d7de;--card-shadow:0 3px 12px rgba(0,0,0,0.1)}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:80px}
+body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-primary);line-height:1.7;transition:background var(--transition),color var(--transition)}
+.header{position:fixed;top:0;left:0;right:0;height:64px;background:var(--bg-secondary);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:1000;backdrop-filter:blur(10px)}
+.header-title{font-size:1.1rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:10px}
+.header-controls{display:flex;align-items:center;gap:12px}
+.theme-toggle{width:40px;height:40px;border-radius:50%;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
+.theme-toggle:hover{border-color:var(--accent-blue)}
+.hamburger{display:none;width:40px;height:40px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.hamburger span{display:block;width:18px;height:2px;background:var(--text-primary);border-radius:2px;transition:all var(--transition)}
+.sidebar{position:fixed;top:64px;left:0;width:var(--sidebar-width);height:calc(100vh - 64px);background:var(--bg-secondary);border-right:1px solid var(--border-color);overflow-y:auto;padding:20px 0;z-index:900;transition:transform var(--transition)}
+.sidebar-nav{list-style:none}
+.sidebar-nav li a{display:block;padding:10px 24px;color:var(--text-secondary);text-decoration:none;font-size:0.9rem;border-left:3px solid transparent;transition:all var(--transition)}
+.sidebar-nav li a:hover,.sidebar-nav li a.active{color:var(--accent-blue);background:var(--bg-tertiary);border-left-color:var(--accent-blue)}
+.sidebar-nav li a.active{font-weight:600}
+.main-content{margin-left:var(--sidebar-width);margin-top:64px;padding:40px;max-width:1000px}
+.section{margin-bottom:60px;animation:fadeInUp 0.5s ease}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.section-title{font-size:1.8rem;font-weight:700;margin-bottom:24px;padding-bottom:12px;border-bottom:2px solid var(--border-color);color:var(--text-primary);display:flex;align-items:center;gap:12px}
+.section-subtitle{font-size:1.3rem;font-weight:600;margin:24px 0 12px;color:var(--text-primary)}
+.card{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius);padding:24px;margin-bottom:20px;box-shadow:var(--card-shadow);transition:all var(--transition)}
+.card:hover{border-color:var(--accent-blue);transform:translateY(-2px)}
+.card-title{font-size:1.1rem;font-weight:600;margin-bottom:12px;color:var(--accent-blue)}
+.tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:500;margin:2px 4px}
+.tag-blue{background:rgba(88,166,255,0.15);color:var(--accent-blue)}
+.tag-green{background:rgba(63,185,80,0.15);color:var(--accent-green)}
+.tag-orange{background:rgba(210,153,34,0.15);color:var(--accent-orange)}
+.tag-red{background:rgba(248,81,73,0.15);color:var(--accent-red)}
+.tag-purple{background:rgba(188,140,255,0.15);color:var(--accent-purple)}
+.btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-size:0.85rem;transition:all var(--transition);font-family:var(--font-sans)}
+.btn:hover{border-color:var(--accent-blue);color:var(--accent-blue)}
+.btn.active{background:var(--accent-blue);color:#fff;border-color:var(--accent-blue)}
+.btn-group{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.diagram-container{background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:var(--radius);padding:20px;margin:20px 0;overflow-x:auto}
+.diagram-container svg{width:100%;max-width:800px;margin:0 auto;display:block}
+.protocol-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:0.85rem}
+.protocol-table th,.protocol-table td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--border-color)}
+.protocol-table th{background:var(--bg-tertiary);color:var(--text-secondary);font-weight:600;position:sticky;top:0}
+.protocol-table tr:hover{background:var(--bg-tertiary)}
+.table-wrapper{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border-color)}
+.expand-card{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;transition:all var(--transition)}
+.expand-header{padding:16px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background var(--transition)}
+.expand-header:hover{background:var(--bg-tertiary)}
+.expand-header h4{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:10px}
+.expand-arrow{transition:transform var(--transition);color:var(--text-secondary)}
+.expand-card.open .expand-arrow{transform:rotate(180deg)}
+.expand-content{max-height:0;overflow:hidden;transition:max-height 0.4s ease;padding:0 20px}
+.expand-card.open .expand-content{max-height:2000px;padding:0 20px 20px}
+.warning-box{background:rgba(248,81,73,0.1);border:1px solid var(--accent-red);border-radius:var(--radius);padding:20px 24px;margin:20px 0}
+.warning-box h4{color:var(--accent-red);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.warning-box ul{margin-left:20px;margin-top:8px}
+.warning-box li{margin-bottom:6px;color:var(--text-secondary)}
+.quiz-question{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius);padding:24px;margin-bottom:20px}
+.quiz-question h4{margin-bottom:16px;color:var(--text-primary)}
+.quiz-options{list-style:none}
+.quiz-options li{padding:12px 16px;margin:6px 0;border:1px solid var(--border-color);border-radius:8px;cursor:pointer;transition:all var(--transition)}
+.quiz-options li:hover{border-color:var(--accent-blue);background:var(--bg-tertiary)}
+.quiz-options li.correct{border-color:var(--accent-green);background:rgba(63,185,80,0.1);cursor:default}
+.quiz-options li.wrong{border-color:var(--accent-red);background:rgba(248,81,73,0.1);cursor:default}
+.quiz-explanation{margin-top:12px;padding:12px 16px;background:var(--bg-tertiary);border-radius:8px;display:none;color:var(--text-secondary);font-size:0.9rem}
+.quiz-explanation.show{display:block}
+.drag-container{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0;min-height:60px;padding:16px;background:var(--bg-tertiary);border:2px dashed var(--border-color);border-radius:var(--radius)}
+.drag-item{padding:10px 16px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;cursor:grab;user-select:none;font-size:0.85rem;transition:all var(--transition)}
+.drag-item:active{cursor:grabbing;transform:scale(1.05)}
+.drag-item.placed{opacity:0.4;pointer-events:none}
+.drop-zone{display:flex;flex-direction:column;gap:8px;min-height:200px;padding:16px;background:var(--bg-tertiary);border:2px dashed var(--border-color);border-radius:var(--radius);margin:16px 0;transition:border-color var(--transition)}
+.drop-zone.drag-over{border-color:var(--accent-blue)}
+.drop-slot{padding:12px 16px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;min-height:44px;display:flex;align-items:center;gap:10px}
+.drop-slot .slot-num{width:24px;height:24px;border-radius:50%;background:var(--accent-blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0}
+.drop-slot .slot-content{color:var(--text-muted);font-size:0.85rem}
+.drop-slot.filled .slot-content{color:var(--text-primary)}
+.search-input{width:100%;padding:12px 16px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-tertiary);color:var(--text-primary);font-size:0.9rem;outline:none;transition:border-color var(--transition);font-family:var(--font-sans)}
+.search-input:focus{border-color:var(--accent-blue)}
+.flowchart{display:flex;flex-direction:column;align-items:center;gap:0;margin:20px 0}
+.flow-node{padding:12px 24px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;text-align:center;font-size:0.9rem;min-width:200px}
+.flow-arrow{width:2px;height:24px;background:var(--accent-blue);position:relative}
+.flow-arrow::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--accent-blue)}
+.concept-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:20px 0}
+.concept-item{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius);padding:20px;transition:all var(--transition)}
+.concept-item:hover{border-color:var(--accent-blue);transform:translateY(-2px)}
+.concept-item h4{font-size:0.95rem;margin-bottom:8px;color:var(--accent-blue)}
+.concept-item p{font-size:0.85rem;color:var(--text-secondary)}
+.info-box{background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.3);border-radius:var(--radius);padding:16px 20px;margin:16px 0}
+.info-box p{color:var(--text-secondary);font-size:0.9rem}
+.overlay{display:none;position:fixed;top:64px;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:899}
+.overlay.show{display:block}
+.anim-step{display:flex;align-items:center;gap:12px;padding:12px 16px;margin:8px 0;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);opacity:0.4;transform:translateX(-10px);transition:all 0.4s ease}
+.anim-step.active{opacity:1;transform:translateX(0);border-color:var(--accent-blue)}
+.anim-step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent-blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;flex-shrink:0}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+@media(max-width:768px){.hamburger{display:flex}.sidebar{transform:translateX(-100%);width:260px}.sidebar.open{transform:translateX(0)}.main-content{margin-left:0;padding:24px 16px}.header-title span{display:none}.protocol-table{font-size:0.75rem}.protocol-table th,.protocol-table td{padding:8px}.concept-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-title">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    <span>机场/VPN/代理服务的运行原理与协议详解</span>
+  </div>
+  <div class="header-controls">
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
+      <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+  <ul class="sidebar-nav">
+    <li><a href="#section1" class="active">📚 基础概念</a></li>
+    <li><a href="#section2">🌐 网络访问路径对比</a></li>
+    <li><a href="#section3">⚡ 协议原理与区别</a></li>
+    <li><a href="#section4">📦 数据封装与转发</a></li>
+    <li><a href="#section5">⚙️ 配置概念理解</a></li>
+    <li><a href="#section6">📱 客户端类别</a></li>
+    <li><a href="#section7">⚠️ 合规、安全和风险</a></li>
+    <li><a href="#section8">🎮 互动模块</a></li>
+  </ul>
+</nav>
+<main class="main-content" id="main-content">
+<!-- Section 1: 基础概念 -->
+<section class="section" id="section1">
+<h2 class="section-title">📚 基础概念</h2>
+
+<div class="warning-box">
+  <h4>⚠️ 法律合规声明</h4>
+  <p>本文档仅用于<strong>网络技术原理教育</strong>，不提供任何实际搭建教程、可执行命令或节点信息。请遵守所在地区法律法规，不得将相关技术用于非法用途。</p>
+</div>
+
+<h3 class="section-subtitle">核心概念</h3>
+<div class="concept-grid">
+  <div class="concept-item">
+    <h4>🔐 VPN（虚拟专用网络）</h4>
+    <p>在公共网络上建立加密隧道，使设备如同处于私有网络中。工作在网络层（L3），所有流量通过隧道转发，系统级全局生效。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🔄 代理（Proxy）</h4>
+    <p>一种中间服务器，代替客户端向目标服务器发起请求。通常工作在应用层（L7），可以按需选择哪些流量经过代理。</p>
+  </div>
+  <div class="concept-item">
+    <h4>✈️ "机场"（Airport）</h4>
+    <p>一种通俗称谓，指提供多个代理节点和订阅链接的服务商。用户通过订阅链接获取节点列表，客户端自动配置连接。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🖥️ 客户端 / 服务端</h4>
+    <p>客户端运行在用户设备上，负责拦截流量并加密发送；服务端（节点）部署在远程服务器上，负责解密并转发请求到目标。</p>
+  </div>
+  <div class="concept-item">
+    <h4>📋 订阅链接（Subscription）</h4>
+    <p>一个URL，返回编码后的节点配置列表。客户端定期拉取该链接以获取最新的节点信息，实现自动更新。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🌍 DNS 的角色</h4>
+    <p>域名解析是访问的第一步。如果DNS被污染或泄露，即使使用了代理，也可能暴露访问目标。远程DNS解析可避免此问题。</p>
+  </div>
+</div>
+
+<h3 class="section-subtitle">代理类型对比</h3>
+<div class="card">
+  <div class="table-wrapper">
+    <table class="protocol-table">
+      <thead><tr><th>类型</th><th>工作方式</th><th>作用范围</th><th>典型用途</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-blue">本地代理</span></td><td>运行在本机，监听端口</td><td>配置了代理的应用</td><td>浏览器分流、开发调试</td></tr>
+        <tr><td><span class="tag tag-green">远程代理</span></td><td>运行在远程服务器</td><td>所有转发到该服务器的请求</td><td>跨区域访问、隐藏源IP</td></tr>
+        <tr><td><span class="tag tag-orange">透明代理</span></td><td>网关/路由器层面劫持</td><td>整个局域网流量</td><td>企业网关、家庭路由</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- Section 2: 网络访问路径对比 -->
+<section class="section" id="section2">
+<h2 class="section-title">🌐 网络访问路径对比</h2>
+<p style="color:var(--text-secondary);margin-bottom:16px;">点击下方按钮切换不同的网络访问模式，观察数据流转路径的变化。</p>
+
+<div class="btn-group" id="diagram-btns">
+  <button class="btn active" onclick="switchDiagram('direct')">直接连接</button>
+  <button class="btn" onclick="switchDiagram('vpn')">VPN 模式</button>
+  <button class="btn" onclick="switchDiagram('proxy')">HTTP/SOCKS 代理</button>
+  <button class="btn" onclick="switchDiagram('airport')">机场客户端</button>
+  <button class="btn" onclick="switchDiagram('multihop')">多跳中继</button>
+</div>
+
+<div class="diagram-container" id="network-diagram">
+  <svg viewBox="0 0 800 220" id="diagram-svg">
+    <!-- Direct connection (default) -->
+    <g id="diag-direct">
+      <rect x="30" y="80" width="120" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/>
+      <text x="90" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="14">用户设备</text>
+      <rect x="620" y="80" width="140" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/>
+      <text x="690" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="14">目标服务器</text>
+      <line x1="150" y1="110" x2="620" y2="110" stroke="var(--accent-blue)" stroke-width="2" stroke-dasharray="8,4">
+        <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite"/>
+      </line>
+      <text x="385" y="100" text-anchor="middle" fill="var(--text-secondary)" font-size="12">明文/TLS 直接请求</text>
+      <text x="385" y="160" text-anchor="middle" fill="var(--accent-orange)" font-size="11">⚠ ISP 可见目标 IP 和 SNI</text>
+    </g>
+  </svg>
+</div>
+
+<div class="card" id="diagram-desc">
+  <div class="card-title" id="diag-title">直接连接</div>
+  <p id="diag-text" style="color:var(--text-secondary);font-size:0.9rem;">用户设备直接向目标服务器发起连接。ISP（互联网服务提供商）可以看到连接的目标IP地址。即使使用HTTPS，SNI（服务器名称指示）字段通常是明文的。</p>
+</div>
+</section>
+
+<!-- Section 3: 协议原理与区别 -->
+<section class="section" id="section3">
+<h2 class="section-title">⚡ 协议原理与区别</h2>
+
+<h3 class="section-subtitle">协议搜索与筛选</h3>
+<input type="text" class="search-input" id="protocol-search" placeholder="🔍 搜索协议名称（如 Shadowsocks、VMess、WireGuard...）" oninput="filterProtocols()">
+
+<div class="btn-group" id="protocol-filter-btns">
+  <button class="btn active" onclick="filterByCategory('all')">全部</button>
+  <button class="btn" onclick="filterByCategory('proxy')">代理协议</button>
+  <button class="btn" onclick="filterByCategory('vpn')">VPN 协议</button>
+  <button class="btn" onclick="filterByCategory('transport')">传输层概念</button>
+</div>
+
+<h3 class="section-subtitle">协议对比表</h3>
+<div class="table-wrapper">
+  <table class="protocol-table" id="protocol-table">
+    <thead><tr><th>协议</th><th>类别</th><th>TCP/UDP</th><th>加密</th><th>伪装能力</th><th>性能</th></tr></thead>
+    <tbody>
+      <tr data-cat="proxy" data-name="HTTP Proxy"><td>HTTP Proxy</td><td><span class="tag tag-blue">代理</span></td><td>TCP</td><td>无（需TLS）</td><td>低</td><td>高</td></tr>
+      <tr data-cat="proxy" data-name="SOCKS5"><td>SOCKS5</td><td><span class="tag tag-blue">代理</span></td><td>TCP/UDP</td><td>无（需TLS）</td><td>低</td><td>高</td></tr>
+      <tr data-cat="proxy" data-name="Shadowsocks"><td>Shadowsocks</td><td><span class="tag tag-blue">代理</span></td><td>TCP/UDP</td><td>AEAD</td><td>中</td><td>高</td></tr>
+      <tr data-cat="proxy" data-name="VMess"><td>VMess</td><td><span class="tag tag-blue">代理</span></td><td>TCP/UDP</td><td>自有加密</td><td>高</td><td>中</td></tr>
+      <tr data-cat="proxy" data-name="VLESS"><td>VLESS</td><td><span class="tag tag-blue">代理</span></td><td>TCP/UDP</td><td>依赖TLS</td><td>高</td><td>高</td></tr>
+      <tr data-cat="proxy" data-name="Trojan"><td>Trojan</td><td><span class="tag tag-blue">代理</span></td><td>TCP</td><td>TLS</td><td>很高</td><td>高</td></tr>
+      <tr data-cat="vpn" data-name="WireGuard"><td>WireGuard</td><td><span class="tag tag-green">VPN</span></td><td>UDP</td><td>ChaCha20</td><td>低</td><td>很高</td></tr>
+      <tr data-cat="vpn" data-name="OpenVPN"><td>OpenVPN</td><td><span class="tag tag-green">VPN</span></td><td>TCP/UDP</td><td>OpenSSL</td><td>中</td><td>中</td></tr>
+      <tr data-cat="proxy" data-name="Hysteria"><td>Hysteria/QUIC</td><td><span class="tag tag-purple">代理</span></td><td>UDP(QUIC)</td><td>TLS 1.3</td><td>中</td><td>很高</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="section-subtitle">传输层概念</h3>
+<div class="concept-grid" id="transport-concepts">
+  <div class="concept-item" data-cat="transport" data-name="TLS">
+    <h4>🔒 TLS（传输层安全）</h4>
+    <p>在TCP连接上提供加密通道，广泛用于HTTPS。代理协议借助TLS使流量看起来与正常HTTPS一致。</p>
+  </div>
+  <div class="concept-item" data-cat="transport" data-name="WebSocket">
+    <h4>🔌 WebSocket</h4>
+    <p>基于HTTP升级的全双工通信协议。代理利用WebSocket将流量伪装成正常的Web长连接。</p>
+  </div>
+  <div class="concept-item" data-cat="transport" data-name="gRPC">
+    <h4>📡 gRPC</h4>
+    <p>基于HTTP/2的高性能RPC框架。用于代理传输时可利用CDN和多路复用特性。</p>
+  </div>
+  <div class="concept-item" data-cat="transport" data-name="Reality">
+    <h4>🎭 Reality</h4>
+    <p>VLESS的高级传输方式，无需域名证书即可模拟真实TLS握手，极大提升伪装性。</p>
+  </div>
+</div>
+
+<h3 class="section-subtitle">协议详情（点击展开）</h3>
+<div id="protocol-details">
+  <div class="expand-card" data-cat="proxy" data-name="HTTP Proxy">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> HTTP Proxy</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>客户端发送CONNECT请求（HTTPS）或完整URL请求（HTTP）到代理服务器，代理建立到目标的连接并中继数据。</p>
+      <p><strong>TCP/UDP：</strong>仅TCP</p>
+      <p><strong>TLS依赖：</strong>自身无加密，需要外层TLS保护</p>
+      <p><strong>优点：</strong>简单通用、浏览器原生支持、调试方便</p>
+      <p><strong>缺点：</strong>明文传输（无加密层时）、不支持UDP、易识别</p>
+      <p><strong>学习场景：</strong>理解代理基本原理、Web调试（如Fiddler/Charles）</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="SOCKS5">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> SOCKS5</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>通用代理协议，支持TCP和UDP转发。客户端通过握手协商后，代理为其建立到任意目标的连接。</p>
+      <p><strong>TCP/UDP：</strong>TCP + UDP（UDP Associate）</p>
+      <p><strong>TLS依赖：</strong>自身无加密，需外层包裹</p>
+      <p><strong>优点：</strong>协议无关（不限于HTTP）、支持UDP、广泛兼容</p>
+      <p><strong>缺点：</strong>无内置加密、认证简单、流量特征明显</p>
+      <p><strong>学习场景：</strong>理解通用代理机制、应用层代理转发</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="Shadowsocks">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> Shadowsocks</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>使用预共享密钥进行AEAD加密，客户端加密请求目标地址和数据后发送到服务端，服务端解密并转发。无握手协商，首包即数据。</p>
+      <p><strong>TCP/UDP：</strong>TCP + UDP</p>
+      <p><strong>TLS依赖：</strong>自有加密（AEAD），不依赖TLS</p>
+      <p><strong>优点：</strong>轻量高效、首包无特征、开源成熟</p>
+      <p><strong>缺点：</strong>流量模式可被统计分析、无伪装能力</p>
+      <p><strong>学习场景：</strong>理解对称加密在代理中的应用、AEAD机制</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="VMess">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> VMess</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>基于UUID认证，使用时间戳+UUID生成请求头加密密钥。支持多种加密方式和混淆选项，数据通过加密通道传输。</p>
+      <p><strong>TCP/UDP：</strong>TCP + UDP（通过Mux）</p>
+      <p><strong>TLS依赖：</strong>自有加密，可选叠加TLS</p>
+      <p><strong>优点：</strong>认证机制完善、支持动态端口、生态完整</p>
+      <p><strong>缺点：</strong>协议较复杂、时间同步要求严格、已有识别方法</p>
+      <p><strong>学习场景：</strong>理解基于UUID的认证机制、多层加密</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="VLESS">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> VLESS</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>VMess的轻量化版本，移除自有加密层，依赖传输层（TLS/Reality）提供安全性。UUID认证，极简协议头。</p>
+      <p><strong>TCP/UDP：</strong>TCP + UDP</p>
+      <p><strong>TLS依赖：</strong>强依赖（TLS/Reality为必需）</p>
+      <p><strong>优点：</strong>极低开销、配合Reality伪装性极强、无时间同步问题</p>
+      <p><strong>缺点：</strong>必须有可靠传输层、裸奔无安全性</p>
+      <p><strong>学习场景：</strong>理解协议分层思想、传输层与应用层分离</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="Trojan">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-blue">代理</span> Trojan</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>利用TLS加密，流量外观与正常HTTPS完全一致。密码的SHA224哈希作为认证，未认证连接被转发到真实Web服务器。</p>
+      <p><strong>TCP/UDP：</strong>TCP（UDP通过扩展）</p>
+      <p><strong>TLS依赖：</strong>TLS是协议核心组成部分</p>
+      <p><strong>优点：</strong>伪装为正常HTTPS、无协议特征、架构简洁</p>
+      <p><strong>缺点：</strong>需要有效TLS证书和域名、性能受TLS影响</p>
+      <p><strong>学习场景：</strong>理解TLS伪装原理、证书体系</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="vpn" data-name="WireGuard">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-green">VPN</span> WireGuard</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>基于Noise协议框架的现代VPN，使用公钥认证。创建虚拟网络接口，所有匹配的IP包通过加密UDP隧道传输。</p>
+      <p><strong>TCP/UDP：</strong>仅UDP</p>
+      <p><strong>TLS依赖：</strong>自有加密（Noise框架、ChaCha20-Poly1305）</p>
+      <p><strong>优点：</strong>代码极简（约4000行）、性能卓越、密码学现代</p>
+      <p><strong>缺点：</strong>UDP固定端口易阻断、无内置伪装、IP固定</p>
+      <p><strong>学习场景：</strong>理解现代VPN设计哲学、公钥加密实践</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="vpn" data-name="OpenVPN">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-green">VPN</span> OpenVPN</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>基于OpenSSL的成熟VPN方案，支持TUN（L3）和TAP（L2）模式。通过证书或预共享密钥认证，建立加密隧道。</p>
+      <p><strong>TCP/UDP：</strong>TCP 或 UDP（可选）</p>
+      <p><strong>TLS依赖：</strong>使用TLS进行密钥协商</p>
+      <p><strong>优点：</strong>高度可配置、跨平台、久经考验</p>
+      <p><strong>缺点：</strong>性能开销较大、配置复杂、特征可识别</p>
+      <p><strong>学习场景：</strong>理解传统VPN架构、PKI证书体系</p>
+    </div>
+  </div>
+  <div class="expand-card" data-cat="proxy" data-name="Hysteria">
+    <div class="expand-header" onclick="toggleExpand(this)">
+      <h4><span class="tag tag-purple">代理</span> Hysteria / QUIC-based</h4>
+      <span class="expand-arrow">▼</span>
+    </div>
+    <div class="expand-content">
+      <p><strong>工作原理：</strong>基于QUIC（HTTP/3底层协议）构建，利用UDP传输和自定义拥塞控制算法（Brutal）实现高吞吐。TLS 1.3加密。</p>
+      <p><strong>TCP/UDP：</strong>UDP（QUIC）</p>
+      <p><strong>TLS依赖：</strong>内置TLS 1.3</p>
+      <p><strong>优点：</strong>高带宽利用率、低延迟、抗丢包</p>
+      <p><strong>缺点：</strong>UDP流量可能被QoS限速、行为激进</p>
+      <p><strong>学习场景：</strong>理解QUIC协议、拥塞控制策略</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- Section 4: 数据封装与转发 -->
+<section class="section" id="section4">
+<h2 class="section-title">📦 数据封装与转发</h2>
+
+<p style="color:var(--text-secondary);margin-bottom:20px;">以下动画演示了代理客户端处理一次请求的完整流程。点击"播放"观看逐步动画。</p>
+
+<div class="btn-group">
+  <button class="btn" onclick="playAnimation()">▶ 播放动画</button>
+  <button class="btn" onclick="resetAnimation()">↺ 重置</button>
+</div>
+
+<div class="animation-container" id="anim-container">
+  <div class="anim-step" data-step="1"><span class="step-num">1</span><span>📱 应用发起请求：浏览器请求 https://example.com</span></div>
+  <div class="anim-step" data-step="2"><span class="step-num">2</span><span>🔀 本地客户端拦截：系统代理/TUN 将流量导入客户端</span></div>
+  <div class="anim-step" data-step="3"><span class="step-num">3</span><span>📋 路由判断：根据规则决定直连/代理/拒绝</span></div>
+  <div class="anim-step" data-step="4"><span class="step-num">4</span><span>🔐 加密封装：使用协议密钥加密目标地址 + 原始数据</span></div>
+  <div class="anim-step" data-step="5"><span class="step-num">5</span><span>📤 发送至节点：加密数据通过传输层发送到远程服务器</span></div>
+  <div class="anim-step" data-step="6"><span class="step-num">6</span><span>🔓 节点解密转发：服务端解密获得目标地址，向目标发起请求</span></div>
+  <div class="anim-step" data-step="7"><span class="step-num">7</span><span>📥 响应回传：目标响应 → 节点加密 → 传回客户端 → 解密 → 应用</span></div>
+</div>
+
+<h3 class="section-subtitle">重要安全概念</h3>
+<div class="concept-grid">
+  <div class="concept-item">
+    <h4>🔐 ≠ 👻 加密不等于匿名</h4>
+    <p>加密保护的是数据内容，但连接的元数据（时间、大小、频率）仍可被观测。代理服务端知道你的真实IP和访问目标。</p>
+  </div>
+  <div class="concept-item">
+    <h4>📊 元数据可见性</h4>
+    <p>即使内容加密，ISP仍可观察：连接时间、数据量、目标IP、连接频率模式。这些可用于流量分析。</p>
+  </div>
+  <div class="concept-item">
+    <h4>💧 DNS/IP/WebRTC 泄露</h4>
+    <p>DNS请求未走代理（DNS泄露）、WebRTC暴露真实IP、IPv6旁路，都会导致隐私泄露。完整防护需要系统级配置。</p>
+  </div>
+  <div class="concept-item">
+    <h4>⏱️ 延迟因素</h4>
+    <p>代理增加延迟来源：加密/解密开销、到节点的物理距离、节点到目标的距离、协议握手次数、拥塞状况。</p>
+  </div>
+</div>
+</section>
+
+
+<!-- Section 5: 配置概念理解 -->
+<section class="section" id="section5">
+<h2 class="section-title">⚙️ 配置概念理解</h2>
+
+<div class="info-box">
+  <p>⚠️ 本节仅解释配置项的<strong>含义和作用</strong>，不提供任何可直接使用的命令或真实配置参数。</p>
+</div>
+
+<h3 class="section-subtitle">配置要素概览</h3>
+<div class="concept-grid">
+  <div class="concept-item">
+    <h4>🏠 服务器地址（Address）</h4>
+    <p>远程节点的IP地址或域名。域名有利于CDN中转和更换IP时不影响客户端配置。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🚪 端口（Port）</h4>
+    <p>服务端监听的网络端口号。常用443（模拟HTTPS）、80等，非标准端口可能被防火墙阻断。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🔑 认证信息（ID/密码/密钥）</h4>
+    <p>UUID（VMess/VLESS）、密码（Shadowsocks/Trojan）、公钥对（WireGuard）。用于验证客户端身份。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🔐 加密方式（Encryption）</h4>
+    <p>如 AES-256-GCM、ChaCha20-Poly1305 等。决定数据加密强度和性能开销。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🚛 传输方式（Transport）</h4>
+    <p>TCP/WebSocket/gRPC/QUIC等。决定数据如何在网络中传输，影响伪装性和穿透能力。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🔒 TLS 设置</h4>
+    <p>是否启用TLS加密外层。涉及证书验证、ALPN协议列表、指纹模拟等设置。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🏷️ SNI / Host</h4>
+    <p>TLS握手中的Server Name Indication和HTTP Host头。用于CDN路由和伪装目标域名。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🔀 路由规则（Routing）</h4>
+    <p>根据域名、IP、进程等条件决定流量走向：直连、代理、拒绝。实现分流和广告过滤。</p>
+  </div>
+  <div class="concept-item">
+    <h4>🌐 DNS 策略</h4>
+    <p>本地DNS / 远程DNS / DoH / DoT。避免DNS污染和泄露，确保域名正确解析。</p>
+  </div>
+  <div class="concept-item">
+    <h4>✂️ 分流（Split Routing）</h4>
+    <p>国内流量直连、国外走代理。基于GeoIP/GeoSite数据库实现智能分流，降低不必要的代理使用。</p>
+  </div>
+  <div class="concept-item">
+    <h4>📋 订阅链接（Subscription）</h4>
+    <p>Base64编码的节点配置列表URL。客户端解析后获取多个节点，支持自动更新和负载均衡。</p>
+  </div>
+</div>
+
+<h3 class="section-subtitle">配置概念流程图</h3>
+<div class="flowchart">
+  <div class="flow-node" style="border-color:var(--accent-blue)">准备远程服务器环境</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-green)">选择协议与传输方式</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-orange)">生成配置（服务端+客户端）</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-purple)">客户端导入配置/订阅</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-cyan)">设置路由规则和DNS策略</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-blue)">连接测试与延迟检测</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-node" style="border-color:var(--accent-red)">排查问题（日志/连通性/DNS）</div>
+</div>
+</section>
+
+<!-- Section 6: 客户端类别 -->
+<section class="section" id="section6">
+<h2 class="section-title">📱 客户端类别</h2>
+
+<div class="info-box">
+  <p>本节介绍不同类型客户端的技术原理和适用场景，不推荐特定工具用于任何非法用途。</p>
+</div>
+
+<div class="concept-grid">
+  <div class="concept-item">
+    <h4>🖥️ 系统级 VPN 客户端</h4>
+    <p>通过操作系统VPN接口（如TUN/TAP虚拟网卡）接管所有系统流量。全局生效，无应用遗漏。适合需要全部流量加密的场景。</p>
+    <p style="margin-top:8px"><span class="tag tag-green">全局</span><span class="tag tag-blue">L3层</span></p>
+  </div>
+  <div class="concept-item">
+    <h4>🔄 本地代理客户端</h4>
+    <p>监听本地端口（如1080/7890），应用通过配置系统代理或手动指定来使用。灵活度高，可精确控制哪些应用走代理。</p>
+    <p style="margin-top:8px"><span class="tag tag-orange">应用级</span><span class="tag tag-blue">L7层</span></p>
+  </div>
+  <div class="concept-item">
+    <h4>📡 路由器/网关</h4>
+    <p>在路由器上运行代理服务，所有经过该路由器的设备自动走代理。透明代理模式，设备无需任何配置。</p>
+    <p style="margin-top:8px"><span class="tag tag-purple">网络级</span><span class="tag tag-green">透明</span></p>
+  </div>
+  <div class="concept-item">
+    <h4>🌐 浏览器扩展</h4>
+    <p>仅代理浏览器内的流量。通过PAC脚本或扩展API控制。最轻量，但范围最小，其他应用不受影响。</p>
+    <p style="margin-top:8px"><span class="tag tag-blue">浏览器级</span><span class="tag tag-orange">轻量</span></p>
+  </div>
+  <div class="concept-item">
+    <h4>📱 移动端客户端</h4>
+    <p>在iOS/Android上通常通过系统VPN API创建本地VPN，拦截流量后按规则处理。受系统限制较多（后台保活、电池优化等）。</p>
+    <p style="margin-top:8px"><span class="tag tag-green">移动</span><span class="tag tag-red">受限</span></p>
+  </div>
+  <div class="concept-item">
+    <h4>⚡ TUN 模式</h4>
+    <p>创建虚拟网卡接管系统流量，在本地实现透明代理。兼具全局覆盖和灵活路由，是现代客户端的主流模式。</p>
+    <p style="margin-top:8px"><span class="tag tag-purple">全局</span><span class="tag tag-green">灵活</span></p>
+  </div>
+</div>
+</section>
+
+<!-- Section 7: 合规、安全和风险 -->
+<section class="section" id="section7">
+<h2 class="section-title">⚠️ 合规、安全和风险</h2>
+
+<div class="warning-box" style="border-width:3px;padding:30px;">
+  <h4 style="font-size:1.2rem;">🚨 重要法律合规警告</h4>
+  <ul style="font-size:1rem;line-height:2;">
+    <li><strong>遵守当地法律法规</strong>：不同国家和地区对VPN/代理的使用有不同法律规定，务必了解并遵守所在地法律。</li>
+    <li><strong>禁止非法用途</strong>：不得利用代理技术从事任何违法犯罪活动，包括但不限于传播违法信息、网络攻击、侵犯知识产权等。</li>
+    <li><strong>企业合规使用</strong>：企业跨境业务使用VPN应当申请合法的国际专线或使用经批准的服务。</li>
+    <li><strong>技术学习目的</strong>：本文档所有内容仅用于理解网络技术原理，不构成使用建议。</li>
+  </ul>
+</div>
+
+<h3 class="section-subtitle">安全风险</h3>
+<div class="concept-grid">
+  <div class="concept-item" style="border-color:var(--accent-red);">
+    <h4 style="color:var(--accent-red);">🔓 未知订阅链接风险</h4>
+    <p>使用不明来源的订阅链接意味着你的所有流量经过他人控制的服务器。中间人可记录、篡改你的数据。永远不要使用不可信来源的节点。</p>
+  </div>
+  <div class="concept-item" style="border-color:var(--accent-red);">
+    <h4 style="color:var(--accent-red);">📝 日志与暴露</h4>
+    <p>自建服务器的访问日志、系统日志可能记录连接信息。服务商可能配合调查提供数据。代理≠绝对匿名。</p>
+  </div>
+  <div class="concept-item" style="border-color:var(--accent-red);">
+    <h4 style="color:var(--accent-red);">💰 账单与滥用</h4>
+    <p>自建节点如果密钥泄露，他人可使用你的服务器产生大量流量，导致高额账单或被服务商封禁。</p>
+  </div>
+  <div class="concept-item" style="border-color:var(--accent-red);">
+    <h4 style="color:var(--accent-red);">🛡️ 服务器安全</h4>
+    <p>远程服务器需要基本安全加固：禁用root远程登录、使用密钥认证、防火墙最小开放、及时更新系统。</p>
+  </div>
+  <div class="concept-item" style="border-color:var(--accent-orange);">
+    <h4 style="color:var(--accent-orange);">🔑 密钥保护</h4>
+    <p>UUID、密码、私钥等认证凭据需要安全存储。不要在公开渠道分享、不要明文存储在不安全的地方。</p>
+  </div>
+  <div class="concept-item" style="border-color:var(--accent-orange);">
+    <h4 style="color:var(--accent-orange);">🎯 最小权限原则</h4>
+    <p>服务端进程应以非root用户运行、只开放必要端口、限制连接数和带宽。减小被攻击后的影响范围。</p>
+  </div>
+</div>
+
+<div class="card" style="border-color:var(--accent-orange);">
+  <div class="card-title" style="color:var(--accent-orange);">核心认知：代理 ≠ 绝对匿名</div>
+  <p style="color:var(--text-secondary);">使用代理/VPN仅改变了流量路径，并不能实现完全匿名。以下信息仍可能暴露你的身份：</p>
+  <ul style="color:var(--text-secondary);margin:12px 0 0 20px;">
+    <li>浏览器指纹（User-Agent、Canvas、WebGL等）</li>
+    <li>登录状态和Cookie关联</li>
+    <li>DNS泄露和WebRTC泄露</li>
+    <li>代理服务端日志</li>
+    <li>流量时序分析和关联</li>
+    <li>支付信息和注册邮箱关联</li>
+  </ul>
+</div>
+</section>
+
+<!-- Section 8: 互动模块 -->
+<section class="section" id="section8">
+<h2 class="section-title">🎮 互动模块</h2>
+
+<h3 class="section-subtitle">📝 知识测验</h3>
+
+<div class="quiz-question" data-correct="2">
+  <h4>1. VPN和代理的核心区别是什么？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. VPN更快，代理更慢</li>
+    <li onclick="checkAnswer(this, true)">B. VPN通常在网络层(L3)全局接管，代理通常在应用层(L7)按需转发</li>
+    <li onclick="checkAnswer(this, false)">C. VPN免费，代理收费</li>
+    <li onclick="checkAnswer(this, false)">D. VPN不加密，代理加密</li>
+  </ul>
+  <div class="quiz-explanation">VPN通过虚拟网卡在网络层接管所有流量，系统全局生效；代理工作在应用层，通常需要应用主动配置才能使用。这是最本质的架构区别。</div>
+</div>
+
+<div class="quiz-question" data-correct="3">
+  <h4>2. Trojan协议的伪装原理是什么？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. 使用特殊的加密算法隐藏数据</li>
+    <li onclick="checkAnswer(this, false)">B. 将流量伪装为视频流</li>
+    <li onclick="checkAnswer(this, true)">C. 流量与正常HTTPS完全一致，未认证连接转发到真实Web服务器</li>
+    <li onclick="checkAnswer(this, false)">D. 通过频繁更换端口避免检测</li>
+  </ul>
+  <div class="quiz-explanation">Trojan的核心设计是：外层是标准TLS，内容与正常HTTPS无差异。服务端同时运行真实Web服务，未认证的连接会被转发到Web服务器，从外部看就是一个普通网站。</div>
+</div>
+
+<div class="quiz-question">
+  <h4>3. 以下哪个不是DNS泄露的后果？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. ISP可以知道你访问了哪些域名</li>
+    <li onclick="checkAnswer(this, false)">B. 可能导致域名被污染返回错误IP</li>
+    <li onclick="checkAnswer(this, true)">C. 加密通道中的数据内容被解密</li>
+    <li onclick="checkAnswer(this, false)">D. 暴露真实访问目标</li>
+  </ul>
+  <div class="quiz-explanation">DNS泄露会暴露访问目标和导致DNS污染，但不会导致加密数据被解密。DNS和传输加密是两个独立的安全层面。</div>
+</div>
+
+<div class="quiz-question">
+  <h4>4. WireGuard使用什么类型的密钥进行认证？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. 用户名和密码</li>
+    <li onclick="checkAnswer(this, false)">B. UUID</li>
+    <li onclick="checkAnswer(this, true)">C. Curve25519公钥对</li>
+    <li onclick="checkAnswer(this, false)">D. TLS证书</li>
+  </ul>
+  <div class="quiz-explanation">WireGuard基于Noise协议框架，使用Curve25519椭圆曲线进行密钥交换和身份认证，每个对等节点都有一对公私钥。这种设计使得配置极为简洁。</div>
+</div>
+
+<div class="quiz-question">
+  <h4>5. 什么是"分流"（Split Routing）的目的？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. 提高加密强度</li>
+    <li onclick="checkAnswer(this, true)">B. 只将需要代理的流量走代理，其余直连，优化速度和效率</li>
+    <li onclick="checkAnswer(this, false)">C. 将流量分成多个加密通道防止攻击</li>
+    <li onclick="checkAnswer(this, false)">D. 随机选择不同节点以隐藏身份</li>
+  </ul>
+  <div class="quiz-explanation">分流的核心目的是按需代理：国内/可直达的流量直连（低延迟），只有需要代理的流量走远程节点。既保证了访问需求，又避免不必要的绕路和带宽消耗。</div>
+</div>
+
+<div class="quiz-question">
+  <h4>6. VLESS相比VMess的主要设计变化是什么？</h4>
+  <ul class="quiz-options">
+    <li onclick="checkAnswer(this, false)">A. 使用了更强的加密算法</li>
+    <li onclick="checkAnswer(this, true)">B. 移除自有加密层，依赖传输层TLS/Reality提供安全性</li>
+    <li onclick="checkAnswer(this, false)">C. 添加了流量混淆功能</li>
+    <li onclick="checkAnswer(this, false)">D. 支持更多种操作系统</li>
+  </ul>
+  <div class="quiz-explanation">VLESS的设计哲学是协议分层：协议本身只负责认证和数据传输，加密安全性完全交给传输层（TLS或Reality）。这降低了协议复杂度，提高了性能，也避免了"双重加密"的开销。</div>
+</div>
+
+<h3 class="section-subtitle">🧩 配置流程排序</h3>
+<p style="color:var(--text-secondary);margin-bottom:12px;">将下方的配置步骤拖放到正确的顺序中：</p>
+
+<div class="drag-container" id="drag-source">
+  <div class="drag-item" draggable="true" data-order="3" id="d3">生成服务端和客户端配置</div>
+  <div class="drag-item" draggable="true" data-order="5" id="d5">设置路由规则和DNS策略</div>
+  <div class="drag-item" draggable="true" data-order="1" id="d1">准备远程服务器环境</div>
+  <div class="drag-item" draggable="true" data-order="6" id="d6">连接测试与验证</div>
+  <div class="drag-item" draggable="true" data-order="2" id="d2">选择协议和传输方式</div>
+  <div class="drag-item" draggable="true" data-order="4" id="d4">客户端导入配置</div>
+  <div class="drag-item" draggable="true" data-order="7" id="d7">排查与优化</div>
+</div>
+
+<div class="drop-zone" id="drop-target">
+  <div class="drop-slot" data-slot="1"><span class="slot-num">1</span><span class="slot-content">拖放第一步到这里</span></div>
+  <div class="drop-slot" data-slot="2"><span class="slot-num">2</span><span class="slot-content">拖放第二步到这里</span></div>
+  <div class="drop-slot" data-slot="3"><span class="slot-num">3</span><span class="slot-content">拖放第三步到这里</span></div>
+  <div class="drop-slot" data-slot="4"><span class="slot-num">4</span><span class="slot-content">拖放第四步到这里</span></div>
+  <div class="drop-slot" data-slot="5"><span class="slot-num">5</span><span class="slot-content">拖放第五步到这里</span></div>
+  <div class="drop-slot" data-slot="6"><span class="slot-num">6</span><span class="slot-content">拖放第六步到这里</span></div>
+  <div class="drop-slot" data-slot="7"><span class="slot-num">7</span><span class="slot-content">拖放第七步到这里</span></div>
+</div>
+
+<div class="btn-group">
+  <button class="btn" onclick="checkDragOrder()">✓ 检查顺序</button>
+  <button class="btn" onclick="resetDrag()">↺ 重置</button>
+</div>
+<div id="drag-result" style="margin-top:12px;padding:12px;border-radius:8px;display:none;"></div>
+
+<h3 class="section-subtitle">🔍 协议快速查找</h3>
+<input type="text" class="search-input" id="quick-search" placeholder="输入关键词快速查找协议信息（如：UDP、加密、伪装、QUIC...）" oninput="quickSearch()">
+<div id="quick-results" style="margin-top:16px;"></div>
+
+</section>
+</main>
+<script>
+function toggleTheme(){const h=document.documentElement;const c=h.getAttribute('data-theme');const n=c==='dark'?'light':'dark';h.setAttribute('data-theme',n);const icon=document.getElementById('theme-icon');if(n==='light'){icon.innerHTML='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';}else{icon.innerHTML='<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';}}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show');}
+document.querySelectorAll('.sidebar-nav a').forEach(a=>{a.addEventListener('click',()=>{if(window.innerWidth<=768)toggleSidebar();});});
+const sections=document.querySelectorAll('.section');const navLinks=document.querySelectorAll('.sidebar-nav a');
+window.addEventListener('scroll',()=>{let current='';sections.forEach(s=>{if(window.scrollY>=s.offsetTop-100)current=s.getAttribute('id');});navLinks.forEach(l=>{l.classList.remove('active');if(l.getAttribute('href')==='#'+current)l.classList.add('active');});});
+</script>
+<script>
+var diagrams={
+direct:{svg:'<g><rect x="30" y="80" width="120" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/><text x="90" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="14">用户设备</text><rect x="620" y="80" width="140" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/><text x="690" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="14">目标服务器</text><line x1="150" y1="110" x2="620" y2="110" stroke="var(--accent-blue)" stroke-width="2" stroke-dasharray="8,4"><animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite"/></line><text x="385" y="100" text-anchor="middle" fill="var(--text-secondary)" font-size="12">明文/TLS 直接请求</text><text x="385" y="160" text-anchor="middle" fill="var(--accent-orange)" font-size="11">⚠ ISP 可见目标 IP 和 SNI</text></g>',title:'直接连接',desc:'用户设备直接向目标服务器发起连接。ISP可以看到连接的目标IP地址，即使使用HTTPS，SNI字段通常是明文的。'},
+vpn:{svg:'<g><rect x="20" y="80" width="110" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/><text x="75" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="13">用户设备</text><rect x="300" y="70" width="140" height="80" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-purple)" stroke-width="2"/><text x="370" y="105" text-anchor="middle" fill="var(--accent-purple)" font-size="13">VPN 服务器</text><text x="370" y="125" text-anchor="middle" fill="var(--text-secondary)" font-size="10">解密转发</text><rect x="610" y="80" width="140" height="60" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/><text x="680" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="13">目标服务器</text><line x1="130" y1="110" x2="300" y2="110" stroke="var(--accent-purple)" stroke-width="3" stroke-dasharray="8,4"><animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite"/></line><line x1="440" y1="110" x2="610" y2="110" stroke="var(--accent-green)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><text x="210" y="90" text-anchor="middle" fill="var(--accent-purple)" font-size="10">加密隧道(全部流量)</text><text x="525" y="90" text-anchor="middle" fill="var(--text-secondary)" font-size="10">正常请求</text><text x="370" y="185" text-anchor="middle" fill="var(--text-secondary)" font-size="11">ISP仅见VPN服务器IP</text></g>',title:'VPN 模式',desc:'VPN在用户设备与服务器之间建立加密隧道，所有系统流量通过隧道传输。ISP只能看到与VPN服务器的加密连接，无法得知实际访问目标。'},
+proxy:{svg:'<g><rect x="10" y="80" width="100" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/><text x="60" y="110" text-anchor="middle" fill="var(--text-primary)" font-size="12">应用程序</text><rect x="170" y="70" width="120" height="70" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-orange)" stroke-width="2"/><text x="230" y="100" text-anchor="middle" fill="var(--accent-orange)" font-size="12">本地代理</text><text x="230" y="120" text-anchor="middle" fill="var(--text-secondary)" font-size="9">SOCKS5/HTTP</text><rect x="380" y="70" width="130" height="70" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-purple)" stroke-width="2"/><text x="445" y="100" text-anchor="middle" fill="var(--accent-purple)" font-size="12">远程代理</text><text x="445" y="120" text-anchor="middle" fill="var(--text-secondary)" font-size="9">解密转发</text><rect x="610" y="80" width="130" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/><text x="675" y="110" text-anchor="middle" fill="var(--text-primary)" font-size="12">目标服务器</text><line x1="110" y1="105" x2="170" y2="105" stroke="var(--text-muted)" stroke-width="2"/><line x1="290" y1="105" x2="380" y2="105" stroke="var(--accent-purple)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><line x1="510" y1="105" x2="610" y2="105" stroke="var(--accent-green)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><text x="335" y="85" text-anchor="middle" fill="var(--accent-purple)" font-size="9">加密传输</text><text x="560" y="85" text-anchor="middle" fill="var(--text-secondary)" font-size="9">正常请求</text><text x="370" y="175" text-anchor="middle" fill="var(--text-secondary)" font-size="10">仅配置了代理的应用走此路径</text></g>',title:'HTTP/SOCKS 代理模式',desc:'应用通过系统代理设置将请求发送到本地代理客户端，客户端加密后转发到远程代理服务器，服务器解密后向目标发起请求。'},
+airport:{svg:'<g><rect x="10" y="80" width="100" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/><text x="60" y="110" text-anchor="middle" fill="var(--text-primary)" font-size="12">用户设备</text><rect x="170" y="65" width="120" height="80" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-orange)" stroke-width="2"/><text x="230" y="95" text-anchor="middle" fill="var(--accent-orange)" font-size="11">机场客户端</text><text x="230" y="115" text-anchor="middle" fill="var(--text-secondary)" font-size="9">路由/订阅</text><rect x="380" y="45" width="110" height="40" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-cyan)" stroke-width="2"/><text x="435" y="70" text-anchor="middle" fill="var(--accent-cyan)" font-size="11">节点A 🇯🇵</text><rect x="380" y="95" width="110" height="40" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-cyan)" stroke-width="2"/><text x="435" y="120" text-anchor="middle" fill="var(--accent-cyan)" font-size="11">节点B 🇺🇸</text><rect x="380" y="145" width="110" height="40" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-cyan)" stroke-width="2"/><text x="435" y="170" text-anchor="middle" fill="var(--accent-cyan)" font-size="11">节点C 🇸🇬</text><rect x="600" y="80" width="130" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/><text x="665" y="110" text-anchor="middle" fill="var(--text-primary)" font-size="12">目标服务器</text><line x1="110" y1="105" x2="170" y2="105" stroke="var(--text-muted)" stroke-width="2"/><line x1="290" y1="100" x2="380" y2="65" stroke="var(--accent-cyan)" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="290" y1="105" x2="380" y2="115" stroke="var(--accent-cyan)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><line x1="290" y1="110" x2="380" y2="165" stroke="var(--accent-cyan)" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="490" y1="115" x2="600" y2="105" stroke="var(--accent-green)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><text x="400" y="210" text-anchor="middle" fill="var(--text-secondary)" font-size="10">客户端自动选择最优节点</text></g>',title:'机场客户端模式',desc:'用户通过订阅链接获取多个节点信息，客户端自动或手动选择最优节点。流量经过加密后发送到选定节点，节点解密后转发到目标。'},
+multihop:{svg:'<g><rect x="10" y="85" width="90" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-blue)" stroke-width="2"/><text x="55" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="11">用户</text><rect x="160" y="75" width="100" height="70" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-orange)" stroke-width="2"/><text x="210" y="108" text-anchor="middle" fill="var(--accent-orange)" font-size="11">入口节点</text><text x="210" y="128" text-anchor="middle" fill="var(--text-secondary)" font-size="9">解密外层</text><rect x="330" y="75" width="100" height="70" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-purple)" stroke-width="2"/><text x="380" y="108" text-anchor="middle" fill="var(--accent-purple)" font-size="11">中继节点</text><text x="380" y="128" text-anchor="middle" fill="var(--text-secondary)" font-size="9">转发</text><rect x="500" y="75" width="100" height="70" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-cyan)" stroke-width="2"/><text x="550" y="108" text-anchor="middle" fill="var(--accent-cyan)" font-size="11">出口节点</text><text x="550" y="128" text-anchor="middle" fill="var(--text-secondary)" font-size="9">解密转发</text><rect x="680" y="85" width="90" height="50" rx="8" fill="var(--bg-secondary)" stroke="var(--accent-green)" stroke-width="2"/><text x="725" y="115" text-anchor="middle" fill="var(--text-primary)" font-size="11">目标</text><line x1="100" y1="110" x2="160" y2="110" stroke="var(--accent-orange)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><line x1="260" y1="110" x2="330" y2="110" stroke="var(--accent-purple)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.8s" repeatCount="indefinite"/></line><line x1="430" y1="110" x2="500" y2="110" stroke="var(--accent-cyan)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.8s" repeatCount="indefinite"/></line><line x1="600" y1="110" x2="680" y2="110" stroke="var(--accent-green)" stroke-width="2" stroke-dasharray="6,3"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite"/></line><text x="395" y="180" text-anchor="middle" fill="var(--text-secondary)" font-size="10">多层加密：每节点只知前后，不知完整路径</text><text x="395" y="200" text-anchor="middle" fill="var(--accent-orange)" font-size="10">延迟增加，路径隐匿性提高</text></g>',title:'多跳中继',desc:'流量经过多个节点逐层转发，类似洋葱路由。每个节点只知道前一跳和后一跳，无法获知完整通信链路。代价是延迟显著增加。'}
+};
+function switchDiagram(type){var btns=document.querySelectorAll('#diagram-btns .btn');btns.forEach(function(b){b.classList.remove('active');});event.target.classList.add('active');var svg=document.getElementById('diagram-svg');svg.style.opacity='0';svg.style.transition='opacity 0.3s ease';setTimeout(function(){svg.innerHTML=diagrams[type].svg;document.getElementById('diag-title').textContent=diagrams[type].title;document.getElementById('diag-text').textContent=diagrams[type].desc;svg.style.opacity='1';},200);}
+document.addEventListener('DOMContentLoaded',function(){document.getElementById('diagram-svg').innerHTML=diagrams.direct.svg;});
+</script>
+<script>
+function filterProtocols(){var q=document.getElementById('protocol-search').value.toLowerCase();document.querySelectorAll('#protocol-table tbody tr').forEach(function(r){var n=r.getAttribute('data-name').toLowerCase();r.style.display=n.includes(q)?'':'none';});document.querySelectorAll('#protocol-details .expand-card').forEach(function(c){var n=c.getAttribute('data-name').toLowerCase();c.style.display=n.includes(q)?'':'none';});}
+function filterByCategory(cat){document.querySelectorAll('#protocol-filter-btns .btn').forEach(function(b){b.classList.remove('active');});event.target.classList.add('active');document.querySelectorAll('#protocol-table tbody tr').forEach(function(r){if(cat==='all'){r.style.display='';return;}r.style.display=r.getAttribute('data-cat')===cat?'':'none';});document.querySelectorAll('#protocol-details .expand-card').forEach(function(c){if(cat==='all'){c.style.display='';return;}c.style.display=c.getAttribute('data-cat')===cat?'':'none';});document.querySelectorAll('#transport-concepts .concept-item').forEach(function(i){if(cat==='all'||cat==='transport'){i.style.display='';return;}i.style.display='none';});}
+function toggleExpand(header){header.parentElement.classList.toggle('open');}
+var animTimer=null;
+function playAnimation(){resetAnimation();var steps=document.querySelectorAll('.anim-step');var i=0;animTimer=setInterval(function(){if(i<steps.length){steps[i].classList.add('active');i++;}else{clearInterval(animTimer);}},600);}
+function resetAnimation(){if(animTimer)clearInterval(animTimer);document.querySelectorAll('.anim-step').forEach(function(s){s.classList.remove('active');});}
+function checkAnswer(li,correct){var question=li.closest('.quiz-question');if(question.classList.contains('answered'))return;question.classList.add('answered');var options=question.querySelectorAll('.quiz-options li');options.forEach(function(opt){opt.style.cursor='default';});if(correct){li.classList.add('correct');}else{li.classList.add('wrong');options.forEach(function(opt){if(opt!==li&&opt.getAttribute('onclick').includes('true')){opt.classList.add('correct');}});}question.querySelector('.quiz-explanation').classList.add('show');}
+</script>
+<script>
+var draggedItem=null;
+document.querySelectorAll('.drag-item').forEach(function(item){item.addEventListener('dragstart',function(e){draggedItem=item;e.dataTransfer.effectAllowed='move';setTimeout(function(){item.style.opacity='0.5';},0);});item.addEventListener('dragend',function(){item.style.opacity='1';draggedItem=null;});});
+var dropZone=document.getElementById('drop-target');
+var slots=dropZone.querySelectorAll('.drop-slot');
+slots.forEach(function(slot){slot.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';slot.style.borderColor='var(--accent-blue)';});slot.addEventListener('dragleave',function(){slot.style.borderColor='var(--border-color)';});slot.addEventListener('drop',function(e){e.preventDefault();slot.style.borderColor='var(--border-color)';if(draggedItem&&!slot.classList.contains('filled')){slot.querySelector('.slot-content').textContent=draggedItem.textContent;slot.classList.add('filled');slot.setAttribute('data-placed-order',draggedItem.getAttribute('data-order'));draggedItem.classList.add('placed');}});});
+function checkDragOrder(){var filledSlots=dropZone.querySelectorAll('.drop-slot.filled');var resultDiv=document.getElementById('drag-result');if(filledSlots.length<7){resultDiv.style.display='block';resultDiv.style.background='rgba(210,153,34,0.1)';resultDiv.style.border='1px solid var(--accent-orange)';resultDiv.innerHTML='<span style="color:var(--accent-orange)">⚠️ 请将所有步骤都放入排序区域</span>';return;}var correct=true;slots.forEach(function(slot){var expected=slot.getAttribute('data-slot');var actual=slot.getAttribute('data-placed-order');if(expected!==actual)correct=false;});resultDiv.style.display='block';if(correct){resultDiv.style.background='rgba(63,185,80,0.1)';resultDiv.style.border='1px solid var(--accent-green)';resultDiv.innerHTML='<span style="color:var(--accent-green)">✅ 完全正确！配置流程理解无误。</span>';}else{resultDiv.style.background='rgba(248,81,73,0.1)';resultDiv.style.border='1px solid var(--accent-red)';resultDiv.innerHTML='<span style="color:var(--accent-red)">❌ 顺序有误。正确顺序：准备服务器→选择协议→生成配置→导入客户端→设置路由DNS→测试→排查优化</span>';}}
+function resetDrag(){document.querySelectorAll('.drag-item').forEach(function(item){item.classList.remove('placed');item.style.opacity='1';});slots.forEach(function(slot){slot.classList.remove('filled');slot.removeAttribute('data-placed-order');var num=slot.getAttribute('data-slot');slot.querySelector('.slot-content').textContent='拖放第'+num+'步到这里';});document.getElementById('drag-result').style.display='none';}
+var protocolData=[{name:'HTTP Proxy',tags:'HTTP 代理 TCP 明文 浏览器 简单',desc:'最基础的代理协议，仅TCP，无加密，适合调试和学习'},{name:'SOCKS5',tags:'SOCKS 通用 TCP UDP 无加密',desc:'通用代理协议，支持TCP/UDP，无内置加密'},{name:'Shadowsocks',tags:'SS 加密 AEAD 轻量 对称加密',desc:'轻量加密代理，使用AEAD对称加密，高性能'},{name:'VMess',tags:'V2Ray UUID 时间戳 动态端口',desc:'V2Ray核心协议，UUID认证，多种加密混淆'},{name:'VLESS',tags:'轻量 无加密 Reality TLS 分层',desc:'VMess精简版，依赖传输层安全'},{name:'Trojan',tags:'HTTPS 伪装 TLS 证书 Web',desc:'伪装HTTPS流量，需TLS证书'},{name:'WireGuard',tags:'VPN UDP 公钥 Noise ChaCha20 现代',desc:'现代VPN，代码精简，性能极佳'},{name:'OpenVPN',tags:'VPN TCP UDP TLS 证书 PKI',desc:'传统成熟VPN，高度可配'},{name:'Hysteria',tags:'QUIC UDP 高速 拥塞控制 HTTP3',desc:'基于QUIC的高性能代理'},{name:'TLS',tags:'加密 传输层 证书 HTTPS',desc:'传输层安全协议'},{name:'WebSocket',tags:'WS 全双工 HTTP升级 CDN',desc:'全双工协议，可穿透CDN'},{name:'gRPC',tags:'HTTP2 多路复用 RPC CDN',desc:'基于HTTP/2的RPC框架'},{name:'Reality',tags:'伪装 无证书 TLS指纹 VLESS',desc:'无需证书模拟真实TLS握手'}];
+function quickSearch(){var q=document.getElementById('quick-search').value.toLowerCase();var container=document.getElementById('quick-results');if(!q){container.innerHTML='';return;}var results=protocolData.filter(function(p){return p.name.toLowerCase().includes(q)||p.tags.includes(q)||p.desc.includes(q);});if(results.length===0){container.innerHTML='<p style="color:var(--text-muted);padding:12px;">未找到匹配结果</p>';return;}container.innerHTML=results.map(function(r){return '<div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;padding:14px 18px;margin-bottom:10px;"><strong style="color:var(--accent-blue);">'+r.name+'</strong><p style="color:var(--text-secondary);font-size:0.85rem;margin-top:4px;">'+r.desc+'</p></div>';}).join('');}
+</script>
+</body>
+</html>
