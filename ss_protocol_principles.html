@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadowsocks 原理与 GFW 主动探测机制 — 技术原理图解</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
+  --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#30363d;
+  --blue:#58a6ff; --green:#3fb950; --orange:#d29922;
+  --red:#f85149; --purple:#bc8cff; --cyan:#39d0d8;
+  --yellow:#d4a84e;
+  --shadow:0 4px 14px rgba(0,0,0,0.5);
+  --radius:12px;
+  --mono:'SF Mono','Cascadia Code','Fira Code',Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+[data-theme="light"]{
+  --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2;
+  --text:#1f2328; --text2:#656d76; --text3:#8b949e;
+  --border:#d0d7de;
+  --shadow:0 4px 14px rgba(0,0,0,0.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{
+  font-family:var(--sans);
+  background:var(--bg); color:var(--text);
+  line-height:1.75;
+  transition:background .3s, color .3s;
+}
+
+/* ===== Header ===== */
+.header{
+  position:fixed; top:0; left:0; right:0; height:64px;
+  background:rgba(22,27,34,0.85); backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 24px; z-index:100;
+}
+[data-theme="light"] .header{background:rgba(246,248,250,0.85)}
+.header-title{
+  font-size:1.05rem; font-weight:600;
+  display:flex; align-items:center; gap:10px;
+}
+.header-title .icon-lock{
+  color:var(--blue); font-size:1.2rem;
+}
+.header-controls{display:flex; gap:10px; align-items:center}
+.theme-btn, .menu-btn{
+  width:38px; height:38px; border-radius:10px;
+  background:var(--bg3); border:1px solid var(--border);
+  color:var(--text); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all .2s;
+}
+.theme-btn:hover, .menu-btn:hover{
+  border-color:var(--blue); color:var(--blue);
+}
+.menu-btn{display:none}
+
+/* ===== Hero ===== */
+.hero{
+  margin-top:64px;
+  padding:70px 24px 50px;
+  text-align:center;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(88,166,255,0.12), transparent 60%),
+    radial-gradient(ellipse at 80% 30%, rgba(188,140,255,0.08), transparent 50%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  border-bottom:1px solid var(--border);
+}
+.hero h1{
+  font-size:2.4rem; font-weight:800; line-height:1.3;
+  margin-bottom:16px;
+  background:linear-gradient(135deg, var(--blue), var(--purple));
+  -webkit-background-clip:text;
+  background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+.hero p{
+  color:var(--text2); font-size:1.1rem; max-width:720px; margin:0 auto 24px;
+}
+.hero-tags{display:flex; justify-content:center; gap:10px; flex-wrap:wrap}
+.hero-tag{
+  padding:6px 14px; border-radius:20px;
+  background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.3);
+  color:var(--blue); font-size:.85rem;
+}
+
+/* ===== Compliance banner ===== */
+.compliance{
+  max-width:920px; margin:30px auto 0;
+  padding:20px 24px;
+  background:rgba(248,81,73,0.08);
+  border:1px solid rgba(248,81,73,0.35);
+  border-radius:var(--radius);
+  display:flex; gap:14px; align-items:flex-start;
+}
+.compliance .c-icon{
+  color:var(--red); font-size:1.5rem; flex-shrink:0;
+}
+.compliance h4{color:var(--red); margin-bottom:4px}
+.compliance p{color:var(--text2); font-size:.92rem; line-height:1.65}
+.compliance strong{color:var(--text)}
+
+/* ===== Layout ===== */
+.layout{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  max-width:1280px;
+  margin:0 auto;
+  gap:40px;
+  padding:40px 24px;
+}
+.sidebar{
+  position:sticky; top:88px;
+  align-self:start;
+  max-height:calc(100vh - 104px);
+  overflow-y:auto;
+  padding-right:8px;
+}
+.sidebar h5{
+  font-size:.75rem; text-transform:uppercase;
+  letter-spacing:1.2px; color:var(--text3);
+  margin-bottom:12px; padding-left:14px;
+}
+.sidebar a{
+  display:block; padding:9px 14px;
+  color:var(--text2); text-decoration:none;
+  font-size:.88rem; border-left:2px solid transparent;
+  border-radius:0 8px 8px 0;
+  transition:all .2s;
+}
+.sidebar a:hover{color:var(--text); background:var(--bg2)}
+.sidebar a.active{
+  color:var(--blue); border-left-color:var(--blue);
+  background:rgba(88,166,255,0.08);
+  font-weight:600;
+}
+.main{min-width:0}
+
+/* ===== Sections ===== */
+.section{margin-bottom:60px}
+.section-head{
+  display:flex; align-items:center; gap:14px;
+  margin-bottom:24px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.section-num{
+  width:44px; height:44px; border-radius:12px;
+  background:linear-gradient(135deg, var(--blue), var(--purple));
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-weight:800; font-size:1.1rem;
+  flex-shrink:0;
+  box-shadow:0 4px 10px rgba(88,166,255,0.25);
+}
+.section-head h2{font-size:1.55rem; font-weight:700}
+.section p{margin-bottom:14px; color:var(--text)}
+.section p.muted{color:var(--text2)}
+
+.sub-head{
+  font-size:1.15rem; font-weight:600;
+  margin:28px 0 14px;
+  color:var(--text);
+  display:flex; align-items:center; gap:10px;
+}
+.sub-head::before{
+  content:''; display:inline-block;
+  width:4px; height:20px; border-radius:2px;
+  background:var(--blue);
+}
+
+/* ===== Cards & content ===== */
+.card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px 24px;
+  margin:16px 0;
+}
+.card h4{color:var(--orange); font-size:1rem; margin-bottom:10px}
+.card p, .card li{color:var(--text2); font-size:.92rem}
+.card ul{padding-left:22px; margin-top:6px}
+.card li{margin-bottom:4px}
+.card code{
+  font-family:var(--mono); font-size:.85em;
+  background:var(--bg3); color:var(--orange);
+  padding:2px 7px; border-radius:4px;
+}
+
+.highlight-box{
+  background:linear-gradient(135deg, rgba(88,166,255,0.1), rgba(188,140,255,0.05));
+  border:1px solid rgba(88,166,255,0.3);
+  border-radius:var(--radius);
+  padding:18px 22px;
+  margin:16px 0;
+}
+.highlight-box h4{color:var(--blue); margin-bottom:8px}
+.highlight-box p{color:var(--text); font-size:.93rem}
+
+.warn-box{
+  background:rgba(210,153,34,0.08);
+  border:1px solid rgba(210,153,34,0.35);
+  border-left:4px solid var(--orange);
+  border-radius:var(--radius);
+  padding:14px 20px;
+  margin:16px 0;
+}
+.warn-box h4{color:var(--orange); margin-bottom:6px; font-size:.95rem}
+.warn-box p{color:var(--text2); font-size:.88rem; line-height:1.6}
+
+/* ===== Diagram container ===== */
+.diagram{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin:20px 0;
+  overflow-x:auto;
+}
+.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
+.diagram-caption{
+  text-align:center; color:var(--text2);
+  font-size:.85rem; margin-top:14px; font-style:italic;
+}
+
+/* ===== Grid ===== */
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0}
+.grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:16px 0}
+.grid-auto{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  gap:14px; margin:16px 0;
+}
+
+/* ===== Tag ===== */
+.tag{
+  display:inline-block;
+  padding:2px 10px; border-radius:20px;
+  font-size:.75rem; font-weight:600;
+  margin:2px 4px 2px 0;
+}
+.tag-blue{background:rgba(88,166,255,0.15); color:var(--blue)}
+.tag-green{background:rgba(63,185,80,0.15); color:var(--green)}
+.tag-orange{background:rgba(210,153,34,0.15); color:var(--orange)}
+.tag-red{background:rgba(248,81,73,0.15); color:var(--red)}
+.tag-purple{background:rgba(188,140,255,0.15); color:var(--purple)}
+.tag-gray{background:var(--bg3); color:var(--text2)}
+
+/* ===== Buttons ===== */
+.btn{
+  padding:9px 18px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:var(--bg3); color:var(--text);
+  cursor:pointer; font-size:.88rem;
+  font-family:var(--sans);
+  transition:all .2s;
+}
+.btn:hover{border-color:var(--blue); color:var(--blue)}
+.btn.primary{
+  background:var(--blue); color:#fff; border-color:var(--blue);
+}
+.btn.primary:hover{background:#4a9bff; color:#fff}
+.btn-row{display:flex; gap:10px; flex-wrap:wrap; margin:14px 0}
+
+/* ===== Packet bytes visualization ===== */
+.bytes{
+  display:flex; flex-wrap:wrap; gap:4px;
+  font-family:var(--mono); font-size:.75rem;
+  margin:12px 0;
+}
+.byte{
+  padding:5px 9px; border-radius:4px;
+  background:var(--bg3); color:var(--text);
+  border:1px solid var(--border);
+}
+.byte.salt{background:rgba(210,153,34,0.15); border-color:var(--orange); color:var(--orange)}
+.byte.len{background:rgba(88,166,255,0.15); border-color:var(--blue); color:var(--blue)}
+.byte.data{background:rgba(63,185,80,0.15); border-color:var(--green); color:var(--green)}
+.byte.tag{background:rgba(188,140,255,0.15); border-color:var(--purple); color:var(--purple)}
+
+/* ===== Protocol comparison table ===== */
+.table-wrap{
+  overflow-x:auto;
+  border-radius:var(--radius);
+  border:1px solid var(--border);
+  margin:16px 0;
+}
+table{width:100%; border-collapse:collapse; font-size:.9rem}
+th{
+  background:var(--bg3); color:var(--text);
+  text-align:left; padding:12px 16px;
+  font-weight:600; font-size:.82rem;
+  text-transform:uppercase; letter-spacing:.5px;
+}
+td{
+  padding:12px 16px; color:var(--text2);
+  border-top:1px solid var(--border);
+}
+tr:hover td{background:var(--bg2)}
+
+/* ===== Quiz ===== */
+.quiz{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px 24px;
+  margin:16px 0;
+}
+.quiz h4{color:var(--blue); margin-bottom:14px}
+.quiz-opts{list-style:none}
+.quiz-opts li{
+  padding:11px 16px; margin:8px 0;
+  border:1px solid var(--border);
+  border-radius:8px;
+  cursor:pointer;
+  transition:all .2s;
+  font-size:.9rem;
+}
+.quiz-opts li:hover{border-color:var(--blue); background:var(--bg3)}
+.quiz-opts li.correct{
+  border-color:var(--green);
+  background:rgba(63,185,80,0.1);
+  color:var(--green); cursor:default;
+}
+.quiz-opts li.wrong{
+  border-color:var(--red);
+  background:rgba(248,81,73,0.1);
+  color:var(--red); cursor:default;
+}
+.quiz-explain{
+  display:none; margin-top:14px;
+  padding:14px 16px;
+  background:var(--bg3);
+  border-left:3px solid var(--blue);
+  border-radius:0 8px 8px 0;
+  font-size:.88rem; color:var(--text2);
+}
+.quiz-explain.show{display:block}
+
+/* ===== Animation: probe sequence ===== */
+.probe-stage{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px;
+  margin:16px 0;
+}
+.probe-step{
+  display:flex; gap:14px; align-items:flex-start;
+  padding:12px 14px; margin:8px 0;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:8px;
+  opacity:.3; transform:translateX(-10px);
+  transition:all .5s;
+}
+.probe-step.active{opacity:1; transform:translateX(0); border-color:var(--blue)}
+.probe-step.attacker{border-color:var(--red)}
+.probe-step.attacker.active{
+  border-color:var(--red);
+  background:rgba(248,81,73,0.08);
+}
+.probe-num{
+  width:30px; height:30px; border-radius:50%;
+  background:var(--blue); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.85rem; flex-shrink:0;
+}
+.probe-step.attacker .probe-num{background:var(--red)}
+.probe-text{flex:1; font-size:.9rem}
+.probe-text strong{color:var(--text)}
+
+/* ===== Footer ===== */
+footer{
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  padding:40px 24px;
+  text-align:center;
+  color:var(--text2);
+  font-size:.88rem;
+}
+footer p{margin-bottom:8px}
+
+/* ===== Responsive ===== */
+@media (max-width: 900px){
+  .layout{grid-template-columns:1fr; gap:20px}
+  .sidebar{
+    position:fixed; top:64px; left:-280px;
+    width:260px; height:calc(100vh - 64px);
+    background:var(--bg2);
+    border-right:1px solid var(--border);
+    padding:20px 10px;
+    transition:left .3s;
+    z-index:99;
+    max-height:unset;
+  }
+  .sidebar.open{left:0}
+  .menu-btn{display:flex}
+  .main{margin:0}
+  .hero h1{font-size:1.8rem}
+  .grid-2, .grid-3{grid-template-columns:1fr}
+  .section-head h2{font-size:1.3rem}
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-title">
+    <span class="icon-lock">🔐</span>
+    <span>Shadowsocks 原理与 GFW 主动探测机制</span>
+  </div>
+  <div class="header-controls">
+    <button class="theme-btn" onclick="toggleTheme()" title="切换主题">
+      <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>Shadowsocks 协议原理与 GFW 主动探测</h1>
+  <p>从密码学设计、协议结构、流量审查到混淆演进 — 一份面向网络安全学习者的技术原理图解。</p>
+  <div class="hero-tags">
+    <span class="hero-tag">AEAD 密码学</span>
+    <span class="hero-tag">主动探测</span>
+    <span class="hero-tag">流量混淆</span>
+    <span class="hero-tag">协议演进</span>
+    <span class="hero-tag">网络安全研究</span>
+  </div>
+  <div class="compliance">
+    <span class="c-icon">⚠️</span>
+    <div>
+      <h4>合规与学习声明</h4>
+      <p>本文档纯粹从 <strong>网络协议设计与安全研究</strong> 的学术角度讲解技术原理，不提供任何部署教程、可执行命令或节点信息。相关主动探测机制已在 USENIX、NDSS 等顶级会议发表大量公开论文。读者需遵守所在地法律法规，将所学原理用于合法的学习、研究、白帽测试等用途。</p>
+    </div>
+  </div>
+</section>
+
+<div class="layout">
+
+<aside class="sidebar" id="sidebar">
+  <h5>目录</h5>
+  <a href="#s1" class="active">① 为什么需要"中转服务器"</a>
+  <a href="#s2">② SSH 远程登录原理</a>
+  <a href="#s3">③ Shadowsocks 协议设计</a>
+  <a href="#s4">④ AEAD 加密深度解析</a>
+  <a href="#s5">⑤ GFW 流量审查机制</a>
+  <a href="#s6">⑥ 主动探测攻击原理</a>
+  <a href="#s7">⑦ 流量混淆的思路</a>
+  <a href="#s8">⑧ WebSocket 伪装原理</a>
+  <a href="#s9">⑨ 协议演进史</a>
+  <a href="#s10">⑩ 知识测验</a>
+</aside>
+
+<main class="main">
+
+
+
+<!-- ========== SECTION 1 ========== -->
+<section class="section" id="s1">
+  <div class="section-head">
+    <div class="section-num">1</div>
+    <h2>为什么代理系统需要"中转服务器"</h2>
+  </div>
+
+  <p>在开始讲协议之前，先搞清楚一个根本问题：<strong>为什么代理系统必须在远端有一台服务器？</strong></p>
+
+  <p class="muted">这看起来是废话，但理解这个问题能帮你建立正确的心智模型。</p>
+
+  <div class="sub-head">🌐 客户端-服务器模型的本质约束</div>
+
+  <p>互联网的通信本质是<strong>双向可达</strong>的：要访问一个服务，必须能够从自己的 IP 发出去、并让对方能回到你的 IP。当本地网络到某个目标之间存在审查（丢包、DNS 污染、TCP Reset 注入），数据就走不通。</p>
+
+  <p>解决办法是：找一个<strong>审查范围之外的第三方</strong>，让它帮你转发流量。这就是"代理服务器"或"VPS"（虚拟专用服务器）存在的根本理由。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 280" width="100%">
+      <defs>
+        <marker id="arr1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#58a6ff"/>
+        </marker>
+        <marker id="arrR" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#f85149"/>
+        </marker>
+      </defs>
+
+      <!-- 场景A: 直接访问被阻断 -->
+      <text x="30" y="28" font-size="13" fill="#d29922" font-weight="700">场景 A：直接访问被审查阻断</text>
+
+      <rect x="30" y="50" width="100" height="50" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="80" y="80" text-anchor="middle" fill="#e6edf3" font-size="12">客户端</text>
+
+      <rect x="310" y="50" width="140" height="50" rx="8" fill="#161b22" stroke="#f85149" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="380" y="75" text-anchor="middle" fill="#f85149" font-size="12" font-weight="700">网络审查层</text>
+      <text x="380" y="90" text-anchor="middle" fill="#f85149" font-size="10">GFW / ISP 过滤</text>
+
+      <rect x="630" y="50" width="120" height="50" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="690" y="80" text-anchor="middle" fill="#e6edf3" font-size="12">目标服务</text>
+
+      <line x1="130" y1="75" x2="310" y2="75" stroke="#58a6ff" stroke-width="2" marker-end="url(#arr1)"/>
+      <line x1="450" y1="75" x2="630" y2="75" stroke="#f85149" stroke-width="2" stroke-dasharray="5,4"/>
+      <text x="540" y="65" text-anchor="middle" fill="#f85149" font-size="11">× 阻断</text>
+
+      <!-- 场景B: 通过中转 -->
+      <text x="30" y="170" font-size="13" fill="#3fb950" font-weight="700">场景 B：通过审查范围外的中转节点</text>
+
+      <rect x="30" y="195" width="100" height="50" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="80" y="225" text-anchor="middle" fill="#e6edf3" font-size="12">客户端</text>
+
+      <rect x="210" y="195" width="120" height="50" rx="8" fill="#161b22" stroke="#d29922" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="270" y="220" text-anchor="middle" fill="#d29922" font-size="12">网络审查层</text>
+      <text x="270" y="235" text-anchor="middle" fill="#8b949e" font-size="9">看到加密流量</text>
+
+      <rect x="410" y="195" width="140" height="50" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+      <text x="480" y="220" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">中转服务器</text>
+      <text x="480" y="235" text-anchor="middle" fill="#8b949e" font-size="9">审查范围之外</text>
+
+      <rect x="630" y="195" width="120" height="50" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="690" y="225" text-anchor="middle" fill="#e6edf3" font-size="12">目标服务</text>
+
+      <line x1="130" y1="220" x2="210" y2="220" stroke="#58a6ff" stroke-width="2" marker-end="url(#arr1)"/>
+      <line x1="330" y1="220" x2="410" y2="220" stroke="#58a6ff" stroke-width="2" marker-end="url(#arr1)"/>
+      <line x1="550" y1="220" x2="630" y2="220" stroke="#3fb950" stroke-width="2" marker-end="url(#arr1)"/>
+
+      <text x="390" y="265" text-anchor="middle" fill="#8b949e" font-size="10">加密隧道：审查层无法理解载荷内容</text>
+    </svg>
+    <div class="diagram-caption">中转服务器把通信路径从"两点一线"拆成了"两段"，审查层只能看到加密流量</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 关键概念：信任转移</h4>
+    <p>使用代理的本质是把"信任"从 ISP 转移到了代理服务商。你不再需要 ISP 不审查你，但你必须信任运营代理的那个人（或公司）不滥用你的流量。<strong>代理 ≠ 匿名</strong>，它只是换了一个人能看到你的元数据。</p>
+  </div>
+
+  <div class="sub-head">🤔 一个常见的误解</div>
+
+  <div class="card">
+    <h4>"用了代理，我的流量就完全加密了"？</h4>
+    <p>不完全对。代理的加密只覆盖 <strong>客户端 ↔ 代理服务器</strong> 这一段。从代理服务器到目标网站的这一段，是否加密取决于你访问的是不是 HTTPS：</p>
+    <ul>
+      <li>访问 HTTPS 网站：端到端加密，代理服务器看不到 URL 路径、页面内容，但仍能看到<strong>目标 IP 和 SNI（服务器域名）</strong></li>
+      <li>访问 HTTP 网站：代理服务器可以<strong>完整读取所有内容</strong>，甚至篡改</li>
+    </ul>
+    <p style="margin-top:10px">这就是为什么"永远只用 HTTPS"比"用代理"更重要。</p>
+  </div>
+</section>
+
+
+<!-- ========== SECTION 2 ========== -->
+<section class="section" id="s2">
+  <div class="section-head">
+    <div class="section-num">2</div>
+    <h2>SSH 远程登录原理</h2>
+  </div>
+
+  <p>要在远程服务器上部署任何软件，第一件事是"登录"到这台机器。这靠的是 <strong>SSH（Secure Shell）协议</strong>。</p>
+
+  <div class="sub-head">🔑 SSH 为什么安全？</div>
+
+  <p>SSH 诞生于 1995 年，替代了早年明文传输密码的 <code>telnet</code> 和 <code>rlogin</code>。它的核心设计是：</p>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>1. 传输加密</h4>
+      <p>通过密钥交换（Diffie-Hellman）协商出会话密钥，之后所有数据用对称加密（如 AES、ChaCha20）保护。</p>
+    </div>
+    <div class="card">
+      <h4>2. 服务器身份验证</h4>
+      <p>客户端通过比对服务器的<strong>主机密钥指纹</strong>（Host Key Fingerprint）确认没被中间人劫持。</p>
+    </div>
+    <div class="card">
+      <h4>3. 客户端身份验证</h4>
+      <p>支持密码认证，也支持<strong>公钥认证</strong>（更安全）——服务器保存公钥，客户端用私钥签名证明身份。</p>
+    </div>
+  </div>
+
+  <div class="sub-head">🤝 SSH 握手流程</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 720 340" width="100%">
+      <defs>
+        <marker id="sshArr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 7,3 0,6" fill="#58a6ff"/>
+        </marker>
+        <marker id="sshArrG" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 7,3 0,6" fill="#3fb950"/>
+        </marker>
+      </defs>
+
+      <!-- 双方柱 -->
+      <line x1="120" y1="60" x2="120" y2="310" stroke="#30363d" stroke-width="2" stroke-dasharray="4,3"/>
+      <line x1="600" y1="60" x2="600" y2="310" stroke="#30363d" stroke-width="2" stroke-dasharray="4,3"/>
+
+      <rect x="60" y="30" width="120" height="36" rx="6" fill="#1f6feb"/>
+      <text x="120" y="54" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">客户端</text>
+
+      <rect x="540" y="30" width="120" height="36" rx="6" fill="#2a6e3a"/>
+      <text x="600" y="54" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">服务器</text>
+
+      <!-- Step 1 -->
+      <line x1="120" y1="90" x2="600" y2="110" stroke="#58a6ff" stroke-width="2" marker-end="url(#sshArr)"/>
+      <text x="360" y="85" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">① TCP SYN → 端口 22</text>
+      <text x="360" y="100" text-anchor="middle" fill="#8b949e" font-size="10">建立 TCP 连接</text>
+
+      <!-- Step 2 -->
+      <line x1="600" y1="130" x2="120" y2="150" stroke="#3fb950" stroke-width="2" marker-end="url(#sshArrG)"/>
+      <text x="360" y="125" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">② 服务器发送版本号 + 主机公钥</text>
+      <text x="360" y="140" text-anchor="middle" fill="#8b949e" font-size="10">SSH-2.0-OpenSSH_X.X + Host Key</text>
+
+      <!-- Step 3 -->
+      <line x1="120" y1="170" x2="600" y2="190" stroke="#58a6ff" stroke-width="2" marker-end="url(#sshArr)"/>
+      <text x="360" y="165" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">③ 算法协商 + DH 密钥交换</text>
+      <text x="360" y="180" text-anchor="middle" fill="#8b949e" font-size="10">协商加密套件（AES-GCM / ChaCha20）</text>
+
+      <!-- Step 4 -->
+      <line x1="600" y1="210" x2="120" y2="230" stroke="#3fb950" stroke-width="2" marker-end="url(#sshArrG)"/>
+      <text x="360" y="205" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">④ 会话密钥建立 → 加密通道就绪</text>
+
+      <!-- Step 5 -->
+      <line x1="120" y1="250" x2="600" y2="270" stroke="#bc8cff" stroke-width="2" marker-end="url(#sshArr)"/>
+      <text x="360" y="245" text-anchor="middle" fill="#bc8cff" font-size="11" font-weight="700">⑤ 身份认证：密码 或 公钥签名</text>
+
+      <!-- Step 6 -->
+      <line x1="600" y1="290" x2="120" y2="310" stroke="#3fb950" stroke-width="2" marker-end="url(#sshArrG)"/>
+      <text x="360" y="285" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">⑥ 认证成功，打开 Shell 会话 ✅</text>
+    </svg>
+    <div class="diagram-caption">SSH 握手：前 4 步建立加密通道，第 5 步才在加密通道内传输密码或签名</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 为什么第一次连接会弹出"是否信任该主机？"</h4>
+    <p>因为客户端需要把服务器发来的<strong>主机公钥指纹</strong>保存下来（写入 <code>~/.ssh/known_hosts</code>）。下一次连接时，如果指纹变了，客户端会立刻警告——这就是防止中间人劫持的核心机制。<strong>如果你的 SSH 客户端突然报警"主机密钥改变"，绝不要忽略，这很可能是有人在你和服务器之间做了手脚。</strong></p>
+  </div>
+
+  <div class="warn-box">
+    <h4>🛡️ SSH 的安全实践原则（原理层面）</h4>
+    <p>1. 密码认证本质上不够安全——弱密码可被暴力破解，公钥认证把"秘密"留在本机，服务器只存公钥。<br>
+    2. 不用 root 直接登录——通过普通用户登录后按需提权，减少攻击面。<br>
+    3. SSH 端口可更换——虽然换端口不能真正提升安全性（防不住定向攻击），但能大幅减少自动化扫描产生的日志噪音。</p>
+  </div>
+</section>
+
+
+<!-- ========== SECTION 3 ========== -->
+<section class="section" id="s3">
+  <div class="section-head">
+    <div class="section-num">3</div>
+    <h2>Shadowsocks 协议设计</h2>
+  </div>
+
+  <p>Shadowsocks（简称 SS）是 2012 年由中国程序员 clowwindy 发布的一个轻量加密代理协议。它的设计哲学非常简单：<strong>不做"看起来像什么协议"的伪装，只把 SOCKS5 代理的内容对称加密一下再发出去</strong>。</p>
+
+  <div class="sub-head">🎯 Shadowsocks 要解决什么问题</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>❌ 前身方案的缺陷</h4>
+      <p>在 SS 之前，常见的选择是 <strong>OpenVPN</strong>、<strong>PPTP</strong>、<strong>SSH 隧道</strong> 等。这些协议要么有明显的协议特征（如 OpenVPN 的握手包），要么性能差（SSH 隧道的 TCP over TCP 问题），要么密码学已被破解（PPTP）。</p>
+    </div>
+    <div class="card">
+      <h4>✅ Shadowsocks 的思路</h4>
+      <p>干脆<strong>彻底扔掉"握手"环节</strong>。客户端和服务器提前共享一个密码，每次连接直接发送<strong>加密后的数据</strong>，没有协议版本号、没有握手、没有固定特征。表面上看，这就是一段<strong>随机字节流</strong>。</p>
+    </div>
+  </div>
+
+  <div class="sub-head">📦 Shadowsocks 的工作流程</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 360" width="100%">
+      <defs>
+        <marker id="ssArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#bc8cff"/>
+        </marker>
+      </defs>
+
+      <!-- 客户端侧 -->
+      <rect x="30" y="30" width="200" height="310" rx="10" fill="rgba(88,166,255,0.05)" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="130" y="52" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">客户端侧</text>
+
+      <!-- 浏览器 -->
+      <rect x="55" y="70" width="150" height="40" rx="6" fill="#161b22" stroke="#58a6ff"/>
+      <text x="130" y="95" text-anchor="middle" fill="#e6edf3" font-size="11">🌐 浏览器</text>
+
+      <line x1="130" y1="110" x2="130" y2="135" stroke="#58a6ff" stroke-width="2" marker-end="url(#ssArr)"/>
+      <text x="135" y="125" fill="#8b949e" font-size="9">SOCKS5 明文</text>
+
+      <!-- SS客户端 -->
+      <rect x="55" y="140" width="150" height="70" rx="6" fill="#161b22" stroke="#bc8cff"/>
+      <text x="130" y="162" text-anchor="middle" fill="#bc8cff" font-size="11" font-weight="700">SS 客户端</text>
+      <text x="130" y="178" text-anchor="middle" fill="#8b949e" font-size="9">① 监听本地端口</text>
+      <text x="130" y="190" text-anchor="middle" fill="#8b949e" font-size="9">② 解析目标地址</text>
+      <text x="130" y="202" text-anchor="middle" fill="#8b949e" font-size="9">③ AEAD 加密</text>
+
+      <line x1="130" y1="210" x2="130" y2="240" stroke="#bc8cff" stroke-width="2" marker-end="url(#ssArr)"/>
+
+      <!-- 加密数据 -->
+      <rect x="55" y="245" width="150" height="60" rx="6" fill="rgba(210,153,34,0.1)" stroke="#d29922" stroke-dasharray="3,3"/>
+      <text x="130" y="265" text-anchor="middle" fill="#d29922" font-size="11" font-weight="700">加密字节流</text>
+      <text x="130" y="280" text-anchor="middle" fill="#8b949e" font-size="9">[Salt] + [EncAddr] + [EncData]</text>
+      <text x="130" y="293" text-anchor="middle" fill="#8b949e" font-size="9">看起来是随机数据</text>
+
+      <!-- 中间 -->
+      <text x="400" y="160" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">⚠ 审查层只看到：</text>
+      <text x="400" y="178" text-anchor="middle" fill="#8b949e" font-size="10">无特征的字节流</text>
+      <text x="400" y="194" text-anchor="middle" fill="#8b949e" font-size="10">TCP 到未知端口</text>
+
+      <line x1="230" y1="275" x2="560" y2="275" stroke="#bc8cff" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#ssArr)"/>
+      <text x="395" y="265" text-anchor="middle" fill="#bc8cff" font-size="10">互联网（经过审查）</text>
+
+      <!-- 服务器侧 -->
+      <rect x="560" y="30" width="200" height="310" rx="10" fill="rgba(63,185,80,0.05)" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="660" y="52" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="700">服务器侧</text>
+
+      <!-- 加密数据到达 -->
+      <rect x="585" y="245" width="150" height="60" rx="6" fill="rgba(210,153,34,0.1)" stroke="#d29922" stroke-dasharray="3,3"/>
+      <text x="660" y="268" text-anchor="middle" fill="#d29922" font-size="11">接收加密字节流</text>
+      <text x="660" y="285" text-anchor="middle" fill="#8b949e" font-size="9">同样的密码</text>
+
+      <line x1="660" y1="245" x2="660" y2="215" stroke="#3fb950" stroke-width="2" marker-end="url(#ssArr)"/>
+
+      <!-- SS 服务端 -->
+      <rect x="585" y="140" width="150" height="70" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="660" y="162" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">SS 服务端</text>
+      <text x="660" y="178" text-anchor="middle" fill="#8b949e" font-size="9">① AEAD 解密</text>
+      <text x="660" y="190" text-anchor="middle" fill="#8b949e" font-size="9">② 取出目标地址</text>
+      <text x="660" y="202" text-anchor="middle" fill="#8b949e" font-size="9">③ 发起出站连接</text>
+
+      <line x1="660" y1="140" x2="660" y2="115" stroke="#3fb950" stroke-width="2" marker-end="url(#ssArr)"/>
+
+      <!-- 目标 -->
+      <rect x="585" y="70" width="150" height="40" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="660" y="95" text-anchor="middle" fill="#e6edf3" font-size="11">🎯 目标网站</text>
+    </svg>
+    <div class="diagram-caption">SS 协议：客户端直接发送加密载荷，没有握手协商，服务器用共享密码解密</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🔍 为什么 SS 没有"握手"？</h4>
+    <p>这是一个刻意的设计选择。传统协议（OpenVPN、TLS）都有握手——客户端说"我想用 XX 算法"，服务器回复"好的，用这个版本"。这些握手包<strong>一旦被识别，整个协议就暴露了</strong>。SS 选择省略握手，把目标地址作为<strong>加密载荷的第一部分</strong>一起发出去，这样表面上看不出任何协议结构。</p>
+  </div>
+
+  <div class="sub-head">⚡ SS 数据结构（TCP 流）</div>
+
+  <p>一个典型的 SS 加密流，格式大致如下：</p>
+
+  <div class="card">
+    <div class="bytes">
+      <span class="byte salt">Salt (16/32 B)</span>
+      <span class="byte len">EncLen (2+16 B)</span>
+      <span class="byte data">EncPayload (1…N B)</span>
+      <span class="byte tag">Tag (16 B)</span>
+      <span class="byte len">EncLen</span>
+      <span class="byte data">EncPayload</span>
+      <span class="byte tag">Tag</span>
+      <span class="byte" style="color:var(--text3)">…</span>
+    </div>
+    <ul>
+      <li><strong style="color:var(--orange)">Salt</strong>：随机盐值，用于从主密钥派生出会话密钥（每次连接不同）</li>
+      <li><strong style="color:var(--blue)">EncLen</strong>：加密后的"数据长度"字段，本身也加密，只能解密后才知道下一块有多大</li>
+      <li><strong style="color:var(--green)">EncPayload</strong>：加密后的实际数据，第一个 Payload 里还包含了<strong>目标地址</strong>（SOCKS5 格式）</li>
+      <li><strong style="color:var(--purple)">Tag</strong>：认证标签（MAC），校验数据没被篡改</li>
+    </ul>
+  </div>
+
+  <p class="muted">下一节我们会把"AEAD"这个关键概念展开讲——它是 SS 安全性的核心，也是"防重放攻击"的基础。</p>
+</section>
+
+
+
+
+<!-- ========== SECTION 4 ========== -->
+<section class="section" id="s4">
+  <div class="section-head">
+    <div class="section-num">4</div>
+    <h2>AEAD 加密深度解析</h2>
+  </div>
+
+  <p>Shadowsocks 早期使用的是 <strong>流加密（Stream Cipher）</strong>，但在 2017 年切换到了 <strong>AEAD</strong>。这个切换是必要的，原因值得深入讲讲。</p>
+
+  <div class="sub-head">🔑 什么是 AEAD？</div>
+
+  <p>AEAD 全称 <strong>Authenticated Encryption with Associated Data</strong>（带关联数据的认证加密）。它是现代密码学的标准构造，同时提供两件事：</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>🔐 保密性 (Confidentiality)</h4>
+      <p>数据被加密，没有密钥的人看不到明文。这是最基础的加密需求。</p>
+    </div>
+    <div class="card">
+      <h4>✅ 完整性 (Integrity)</h4>
+      <p>每段密文带一个 <strong>认证标签（MAC/Tag）</strong>。如果攻击者修改了一个字节，解密时标签验证就会失败——<strong>你能立刻知道数据被篡改过</strong>。</p>
+    </div>
+  </div>
+
+  <div class="sub-head">⚠️ 流加密时代的漏洞</div>
+
+  <div class="warn-box">
+    <h4>早期 SS 的致命问题：没有完整性校验</h4>
+    <p>流加密（如 <code>aes-256-cfb</code>）只管加密，不管防篡改。攻击者虽然看不懂密文，但可以<strong>翻转密文中的某些位</strong>，导致解密后的明文发生预期的变化。这种攻击叫 <strong>位翻转攻击（Bit-flipping Attack）</strong>。</p>
+    <p style="margin-top:8px">此外，早期 SS 还有一个更严重的漏洞：<strong>重定向攻击（Redirection Attack）</strong>。攻击者可以构造看似合法的密文发送给服务器，服务器解密后会尝试连接攻击者指定的目标——这就变成了一个"开放代理"，攻击者可以用它探测内网、发起攻击。</p>
+  </div>
+
+  <p>AEAD 一举解决了这两个问题：任何对密文的修改都会让认证标签失效，服务器立刻丢弃这个连接。</p>
+
+  <div class="sub-head">🧪 AEAD 的工作流程（ChaCha20-Poly1305 为例）</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 360" width="100%">
+      <!-- 加密侧 -->
+      <text x="150" y="30" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="700">📤 加密 (客户端)</text>
+
+      <rect x="50" y="50" width="200" height="40" rx="6" fill="#161b22" stroke="#58a6ff"/>
+      <text x="150" y="75" text-anchor="middle" fill="#e6edf3" font-size="11">明文数据 (Plaintext)</text>
+
+      <rect x="50" y="105" width="200" height="40" rx="6" fill="#161b22" stroke="#d29922"/>
+      <text x="150" y="130" text-anchor="middle" fill="#d29922" font-size="11">密钥 Key + Nonce (IV)</text>
+
+      <rect x="50" y="160" width="200" height="60" rx="6" fill="#21262d" stroke="#bc8cff" stroke-width="2"/>
+      <text x="150" y="182" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">ChaCha20 加密</text>
+      <text x="150" y="200" text-anchor="middle" fill="#8b949e" font-size="10">Key + Nonce + 计数器</text>
+      <text x="150" y="212" text-anchor="middle" fill="#8b949e" font-size="10">生成密钥流 ⊕ 明文</text>
+
+      <rect x="50" y="235" width="200" height="40" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="150" y="260" text-anchor="middle" fill="#3fb950" font-size="11">密文 (Ciphertext)</text>
+
+      <rect x="50" y="290" width="200" height="50" rx="6" fill="#21262d" stroke="#bc8cff" stroke-width="2"/>
+      <text x="150" y="312" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">Poly1305 MAC</text>
+      <text x="150" y="328" text-anchor="middle" fill="#8b949e" font-size="10">对密文生成 16 字节认证标签</text>
+
+      <line x1="150" y1="90" x2="150" y2="160" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="150" y1="145" x2="150" y2="160" stroke="#d29922" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="150" y1="220" x2="150" y2="235" stroke="#3fb950" stroke-width="1.5"/>
+      <line x1="150" y1="275" x2="150" y2="290" stroke="#3fb950" stroke-width="1.5"/>
+
+      <!-- 箭头 -->
+      <line x1="260" y1="190" x2="520" y2="190" stroke="#bc8cff" stroke-width="3" stroke-dasharray="6,3"/>
+      <polygon points="520,187 528,190 520,193" fill="#bc8cff"/>
+      <text x="390" y="182" text-anchor="middle" fill="#bc8cff" font-size="11">网络传输</text>
+      <text x="390" y="204" text-anchor="middle" fill="#8b949e" font-size="10">密文 + Tag</text>
+
+      <!-- 解密侧 -->
+      <text x="630" y="30" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="700">📥 解密 (服务器)</text>
+
+      <rect x="530" y="50" width="200" height="40" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="630" y="75" text-anchor="middle" fill="#3fb950" font-size="11">密文 + Tag</text>
+
+      <rect x="530" y="105" width="200" height="60" rx="6" fill="#21262d" stroke="#bc8cff" stroke-width="2"/>
+      <text x="630" y="127" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">① 先验证 Tag</text>
+      <text x="630" y="143" text-anchor="middle" fill="#8b949e" font-size="10">重新计算 Poly1305</text>
+      <text x="630" y="156" text-anchor="middle" fill="#8b949e" font-size="10">比对是否一致</text>
+
+      <rect x="530" y="180" width="95" height="40" rx="6" fill="rgba(63,185,80,0.1)" stroke="#3fb950"/>
+      <text x="577" y="205" text-anchor="middle" fill="#3fb950" font-size="11">✓ 匹配</text>
+
+      <rect x="635" y="180" width="95" height="40" rx="6" fill="rgba(248,81,73,0.1)" stroke="#f85149"/>
+      <text x="682" y="205" text-anchor="middle" fill="#f85149" font-size="11">✗ 不匹配</text>
+
+      <line x1="577" y1="220" x2="577" y2="240" stroke="#3fb950" stroke-width="1.5"/>
+      <line x1="682" y1="220" x2="682" y2="240" stroke="#f85149" stroke-width="1.5"/>
+
+      <rect x="530" y="245" width="95" height="50" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="577" y="266" text-anchor="middle" fill="#3fb950" font-size="10">② 再解密</text>
+      <text x="577" y="282" text-anchor="middle" fill="#e6edf3" font-size="10">得到明文</text>
+
+      <rect x="635" y="245" width="95" height="50" rx="6" fill="#161b22" stroke="#f85149"/>
+      <text x="682" y="266" text-anchor="middle" fill="#f85149" font-size="10">丢弃数据</text>
+      <text x="682" y="282" text-anchor="middle" fill="#f85149" font-size="10">不暴露明文</text>
+    </svg>
+    <div class="diagram-caption">AEAD 的关键：<strong>先验证，再解密</strong>——如果篡改，永远不会看到"错误解密"的输出</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🧠 "先验证再解密"为什么重要</h4>
+    <p>这叫 <strong>Encrypt-then-MAC</strong> 模式，是密码学界公认的正确构造。相反的做法（先解密再验证）会让解密过程本身成为攻击面——经典的"Padding Oracle 攻击"就是攻击这种错误构造的。AEAD 从设计上消除了这类漏洞。</p>
+  </div>
+
+  <div class="sub-head">🎰 Nonce 不能重复</div>
+
+  <div class="card">
+    <h4>Nonce：只用一次的随机数</h4>
+    <p>AEAD 要求每一次加密都使用<strong>不同的 Nonce</strong>（也叫 IV）。如果同一个密钥下重复使用了 Nonce，攻击者可以通过数学运算<strong>恢复出明文</strong>。</p>
+    <p style="margin-top:8px">在 Shadowsocks 里，Nonce 从 0 开始，每加密一个数据块就 +1。这保证了单个连接内 Nonce 永远不重复。但<strong>不同连接之间</strong>，Nonce 会从 0 重新开始——所以每次连接会先发一个随机 <strong>Salt</strong>，用它和主密钥派生出<strong>这次连接专属的会话密钥</strong>。这样即使两个连接的 Nonce 值相同，密钥也不同，安全性得到保证。</p>
+  </div>
+
+  <div class="sub-head">📊 两种常见 AEAD 算法对比</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>密钥长度</th>
+          <th>核心原理</th>
+          <th>性能特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>AES-128-GCM / AES-256-GCM</strong></td>
+          <td>128 / 256 bit</td>
+          <td>AES 分组加密 + GHASH 认证</td>
+          <td>有 AES-NI 硬件加速的 CPU 上极快；无硬件加速时较慢</td>
+        </tr>
+        <tr>
+          <td><strong>ChaCha20-Poly1305</strong></td>
+          <td>256 bit</td>
+          <td>ChaCha20 流加密 + Poly1305 MAC</td>
+          <td>纯软件实现，在移动设备（ARM）上比软件 AES 快很多</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted">设计 Shadowsocks 的人选择 ChaCha20-Poly1305 作为默认，是因为它在手机、路由器这些没有 AES-NI 的设备上性能优势明显。这个算法也是 TLS 1.3、WireGuard、Signal 等现代协议的标配。</p>
+</section>
+
+
+<!-- ========== SECTION 5 ========== -->
+<section class="section" id="s5">
+  <div class="section-head">
+    <div class="section-num">5</div>
+    <h2>GFW 流量审查机制</h2>
+  </div>
+
+  <p>要理解为什么 SS 会被封，需要先理解<strong>大规模网络流量审查系统</strong>是怎么工作的。这些内容基于公开发表的学术研究（Xue et al. USENIX '22、Bock et al. NDSS '20 等）。</p>
+
+  <div class="sub-head">🔍 流量审查的三个层次</div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>① 被动检测</h4>
+      <p>不主动发包，只<strong>观察</strong>经过的流量。通过特征匹配（关键字、协议指纹、证书字段）识别可疑连接。</p>
+      <span class="tag tag-blue">低成本</span>
+      <span class="tag tag-gray">易被随机化绕过</span>
+    </div>
+    <div class="card">
+      <h4>② 主动探测</h4>
+      <p>对可疑目标<strong>主动发送探测数据</strong>，观察响应特征来确认服务类型。这是 SS 被精准封锁的主要手段。</p>
+      <span class="tag tag-red">精准</span>
+      <span class="tag tag-orange">计算成本高</span>
+    </div>
+    <div class="card">
+      <h4>③ 主动干扰</h4>
+      <p>识别后的处置：<strong>TCP RST 注入</strong>、DNS 污染、IP 黑洞、端口封锁、带宽限速等。</p>
+      <span class="tag tag-red">直接阻断</span>
+      <span class="tag tag-purple">可复盘</span>
+    </div>
+  </div>
+
+  <div class="sub-head">🧬 被动检测：流量指纹识别</div>
+
+  <p>即使你的流量完全加密，它仍然有很多"指纹"：</p>
+
+  <div class="card">
+    <h4>加密流量的可观察特征</h4>
+    <ul>
+      <li><strong>包长度分布（Packet Length Distribution）</strong>：不同协议有不同的典型包长模式。比如 TLS 握手包通常有明显的 ClientHello 大小</li>
+      <li><strong>流量方向和时序（Timing Pattern）</strong>：HTTP 浏览是"请求小、响应大"，视频流是"持续大流量下行"，SSH 交互是"小包双向"——这些都能区分</li>
+      <li><strong>TCP 握手字段</strong>：初始窗口大小（Initial Window）、MSS 选项、TCP Option 顺序——操作系统有独特指纹</li>
+      <li><strong>TLS 指纹（JA3/JA4）</strong>：ClientHello 里的密码套件列表、扩展顺序，不同客户端有独特组合</li>
+      <li><strong>连接特征</strong>：长连接还是短连接、首包大小、每秒包数</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🚨 对 SS 而言最致命的特征</h4>
+    <p>Shadowsocks 的"无协议特征"恰恰成了最大的特征——<strong>完全随机、没有任何已知协议结构的字节流</strong>，在互联网上反而是极度罕见的。正常的 HTTP、HTTPS、QUIC 流量都有明确的格式。一条"纯随机"的 TCP 流在审查者眼里就像"举着手大喊我不正常"一样。</p>
+    <p style="margin-top:8px">学术论文 <em>"The Random Walk is a Path"</em>（Wu et al. 2023）指出，GFW 使用了多种熵值检测方法来识别全随机流量。</p>
+  </div>
+
+  <div class="sub-head">📐 熵值检测原理</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 260" width="100%">
+      <!-- HTTP -->
+      <text x="130" y="30" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">普通 HTTP 流量</text>
+      <g transform="translate(30,50)">
+        <!-- ASCII pattern bytes -->
+        <rect x="0" y="0" width="24" height="30" fill="#58a6ff"/>
+        <rect x="26" y="0" width="24" height="30" fill="#58a6ff"/>
+        <rect x="52" y="0" width="24" height="30" fill="#3fb950"/>
+        <rect x="78" y="0" width="24" height="30" fill="#58a6ff"/>
+        <rect x="104" y="0" width="24" height="30" fill="#58a6ff"/>
+        <rect x="130" y="0" width="24" height="30" fill="#3fb950"/>
+        <rect x="156" y="0" width="24" height="30" fill="#58a6ff"/>
+        <rect x="182" y="0" width="24" height="30" fill="#58a6ff"/>
+        <text x="103" y="20" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">GET / HTTP/1.1</text>
+      </g>
+      <text x="130" y="100" text-anchor="middle" fill="#8b949e" font-size="10">字节分布集中在 ASCII 可打印区</text>
+      <text x="130" y="115" text-anchor="middle" fill="#d29922" font-size="11" font-weight="700">熵 ≈ 4.5 bit/byte</text>
+
+      <!-- TLS -->
+      <text x="390" y="30" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">TLS 加密流量</text>
+      <g transform="translate(290,50)">
+        <rect x="0" y="0" width="24" height="30" fill="#d29922"/>
+        <rect x="26" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="52" y="0" width="24" height="30" fill="#d29922"/>
+        <rect x="78" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="104" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="130" y="0" width="24" height="30" fill="#d29922"/>
+        <rect x="156" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="182" y="0" width="24" height="30" fill="#d29922"/>
+        <text x="103" y="20" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">随机密文</text>
+      </g>
+      <text x="390" y="100" text-anchor="middle" fill="#8b949e" font-size="10">但开头有明显的 TLS Record 结构</text>
+      <text x="390" y="115" text-anchor="middle" fill="#d29922" font-size="11" font-weight="700">熵高 + 明显协议头</text>
+
+      <!-- SS -->
+      <text x="650" y="30" text-anchor="middle" fill="#f85149" font-size="12" font-weight="700">Shadowsocks 流量</text>
+      <g transform="translate(550,50)">
+        <rect x="0" y="0" width="24" height="30" fill="#f85149"/>
+        <rect x="26" y="0" width="24" height="30" fill="#d29922"/>
+        <rect x="52" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="78" y="0" width="24" height="30" fill="#f85149"/>
+        <rect x="104" y="0" width="24" height="30" fill="#d29922"/>
+        <rect x="130" y="0" width="24" height="30" fill="#bc8cff"/>
+        <rect x="156" y="0" width="24" height="30" fill="#f85149"/>
+        <rect x="182" y="0" width="24" height="30" fill="#bc8cff"/>
+        <text x="103" y="20" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">纯随机</text>
+      </g>
+      <text x="650" y="100" text-anchor="middle" fill="#8b949e" font-size="10">从第一个字节起就是完全随机</text>
+      <text x="650" y="115" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">熵 ≈ 7.9 bit/byte（极高）</text>
+
+      <!-- 结论 -->
+      <line x1="30" y1="150" x2="750" y2="150" stroke="#30363d" stroke-dasharray="4,3"/>
+
+      <text x="390" y="180" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">📊 审查系统的判断逻辑</text>
+      <text x="390" y="205" text-anchor="middle" fill="#8b949e" font-size="11">① 统计前 N 个字节的熵值</text>
+      <text x="390" y="222" text-anchor="middle" fill="#8b949e" font-size="11">② 检查是否符合已知协议的起始模式（HTTP/TLS/SSH…）</text>
+      <text x="390" y="239" text-anchor="middle" fill="#8b949e" font-size="11">③ 如果"高熵 + 无已知协议头"→ 标记为可疑，启动主动探测</text>
+    </svg>
+    <div class="diagram-caption">加密流量都有高熵，但 SS 的"纯随机"+"无已知协议头"的组合是独一无二的可疑特征</div>
+  </div>
+
+  <p class="muted">下一节，我们进入最核心的话题——<strong>主动探测</strong>。</p>
+</section>
+
+
+<!-- ========== SECTION 6 ========== -->
+<section class="section" id="s6">
+  <div class="section-head">
+    <div class="section-num">6</div>
+    <h2>主动探测攻击原理</h2>
+  </div>
+
+  <p>主动探测（Active Probing）是 GFW 识别代理服务器的<strong>核心技术</strong>，最早在 2015 年被学术界系统性记录（Ensafi et al.）。它的工作流程值得详细拆解。</p>
+
+  <div class="sub-head">🎯 主动探测的完整攻击链</div>
+
+  <div class="btn-row">
+    <button class="btn primary" onclick="playProbe()">▶ 播放动画</button>
+    <button class="btn" onclick="resetProbe()">↺ 重置</button>
+  </div>
+
+  <div class="probe-stage" id="probeStage">
+    <div class="probe-step" data-n="1">
+      <div class="probe-num">1</div>
+      <div class="probe-text">
+        <strong>用户发起连接</strong> — 客户端向远端服务器（比如 IP <code>A.B.C.D</code>，端口 8388）发送第一个加密包。
+      </div>
+    </div>
+    <div class="probe-step attacker" data-n="2">
+      <div class="probe-num">2</div>
+      <div class="probe-text">
+        <strong>审查系统观察</strong> — GFW 在经过的流量中<strong>被动捕获</strong>这个包，发现它是一段无协议特征的高熵字节流。记录下 <code>(目标 IP, 端口)</code> 作为可疑目标，但暂时放行流量。
+      </div>
+    </div>
+    <div class="probe-step attacker" data-n="3">
+      <div class="probe-num">3</div>
+      <div class="probe-text">
+        <strong>一段时间后，触发主动探测</strong> — 审查系统使用<strong>自己控制的 IP 地址</strong>（可能来自全国各地）向 <code>A.B.C.D:8388</code> 发送多种类型的探测包：
+        <ul style="margin-top:8px; margin-left:20px">
+          <li>重放用户之前发的真实加密包</li>
+          <li>发送随机字节流（测试服务器是否接受任意数据）</li>
+          <li>发送已知协议的 Hello 包（TLS ClientHello、HTTP GET）</li>
+        </ul>
+      </div>
+    </div>
+    <div class="probe-step attacker" data-n="4">
+      <div class="probe-num">4</div>
+      <div class="probe-text">
+        <strong>观察服务器的反应</strong> — 不同的服务会有不同的响应模式：
+        <ul style="margin-top:8px; margin-left:20px">
+          <li><strong>SSH 服务器</strong>：会返回明文的 <code>SSH-2.0-OpenSSH_...</code> 版本字符串</li>
+          <li><strong>HTTPS 服务器</strong>：收到乱码会返回 TLS Alert 或立刻关闭连接</li>
+          <li><strong>Shadowsocks 服务器（没配 plugin）</strong>：收到乱码会<strong>默默读取然后关闭连接</strong>——因为 AEAD 解密失败，它不会回复任何东西，但也不会立刻关闭</li>
+        </ul>
+      </div>
+    </div>
+    <div class="probe-step attacker" data-n="5">
+      <div class="probe-num">5</div>
+      <div class="probe-text">
+        <strong>服务指纹识别</strong> — 通过统计多次探测的响应模式（读取时长、关闭时机、是否发送任何数据、TCP RST vs FIN），审查系统可以以很高的准确率判断这是<strong>哪种服务</strong>。针对 SS 的研究显示准确率可达 99%+。
+      </div>
+    </div>
+    <div class="probe-step attacker" data-n="6">
+      <div class="probe-num">6</div>
+      <div class="probe-text">
+        <strong>封锁生效</strong> — 审查系统将 <code>(A.B.C.D, 8388)</code> 加入黑名单。后续从任何国内 IP 到这个目标的流量都会被 RST 阻断。这就是用户体验到的"端口被秒封"。
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 这个机制的巧妙之处</h4>
+    <p>它不需要破解加密、不需要猜密码——只需要观察<strong>服务器行为模式</strong>。这是一种典型的"侧信道攻击"思路：看不到内容，但行为暴露身份。</p>
+  </div>
+
+  <div class="sub-head">🔬 学术研究中的关键发现</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Alice, Bob & GFW (Ensafi 2015)</h4>
+      <p>首次系统性测量了主动探测的规模：从 1 万 + 不同 IP 发起，延迟从流量观测到探测约 1 秒到数分钟不等。涵盖 Tor、VPN、代理等多种协议。</p>
+    </div>
+    <div class="card">
+      <h4>主动探测的扩散 (Xue 2022)</h4>
+      <p>详细分析了 GFW 对 Shadowsocks 的精确探测算法，发现它使用多种不同的"触发器"包，包括纯随机、错误协议头、等不同长度的探测包来验证。</p>
+    </div>
+  </div>
+
+  <div class="sub-head">🎭 为什么"首包 AEAD 认证失败就直接关闭"会暴露身份</h4>
+
+  <div class="card">
+    <h4>对比正常服务的行为</h4>
+    <p><strong>SSH 服务器</strong>收到乱码：先发送版本字符串，然后等待握手。</p>
+    <p><strong>HTTPS 服务器</strong>收到乱码：发送 <code>TLS Alert: bad_record_mac</code>，然后关闭。</p>
+    <p><strong>Nginx 收到乱码</strong>：可能返回 HTTP 400 Bad Request。</p>
+    <p style="margin-top:8px"><strong>Shadowsocks 服务器</strong>收到乱码：AEAD 验证失败就<strong>一言不发直接关闭</strong>。这种"静默关闭"模式在正常服务中<strong>极度罕见</strong>，反而成了特征。</p>
+    <p class="muted" style="margin-top:8px">这是一个经典的"反侦测悖论"：为了避免泄露信息而选择沉默，沉默本身就是信息。</p>
+  </div>
+
+  <div class="warn-box">
+    <h4>🧩 对策的根本方向</h4>
+    <p>解决方案不是"加密得更好"——加密已经完美了。解决方案是让服务器的<strong>整体行为模式看起来像一个普通的 Web 服务</strong>。这就引出了下一节：流量混淆。</p>
+  </div>
+</section>
+
+
+
+
+<!-- ========== SECTION 7 ========== -->
+<section class="section" id="s7">
+  <div class="section-head">
+    <div class="section-num">7</div>
+    <h2>流量混淆（Obfuscation）的思路</h2>
+  </div>
+
+  <p>既然 SS 的问题是"看起来不像正常协议"，解决办法就是<strong>让它看起来像正常协议</strong>。这就是混淆（Obfuscation）的核心思想。学术界把混淆方案分成三大类：</p>
+
+  <div class="sub-head">🎨 三种混淆范式</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 340" width="100%">
+      <!-- 分类A: 随机化 -->
+      <rect x="20" y="30" width="240" height="280" rx="10" fill="rgba(88,166,255,0.05)" stroke="#58a6ff" stroke-dasharray="4,3"/>
+      <text x="140" y="55" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">A. 随机化 (Randomize)</text>
+      <text x="140" y="75" text-anchor="middle" fill="#8b949e" font-size="10">"让流量尽可能随机"</text>
+
+      <g transform="translate(40,95)">
+        <rect x="0" y="0" width="200" height="40" rx="6" fill="#161b22" stroke="#58a6ff"/>
+        <text x="100" y="25" text-anchor="middle" fill="#e6edf3" font-size="11">Shadowsocks (无 Plugin)</text>
+      </g>
+
+      <text x="140" y="160" text-anchor="middle" fill="#8b949e" font-size="10">思路：完全无特征字节流</text>
+      <text x="140" y="180" text-anchor="middle" fill="#f85149" font-size="11">❌ 反成最强特征</text>
+
+      <g transform="translate(40,210)">
+        <rect x="0" y="0" width="200" height="30" rx="6" fill="#21262d" stroke="#30363d"/>
+        <text x="100" y="20" text-anchor="middle" fill="#8b949e" font-size="10">适用：能自动 ban 所有随机流量的</text>
+      </g>
+      <text x="140" y="260" text-anchor="middle" fill="#8b949e" font-size="10">审查系统较弱的地区</text>
+      <text x="140" y="285" text-anchor="middle" fill="#d29922" font-size="10">时代产物，现已被主动探测瓦解</text>
+
+      <!-- 分类B: 模仿 -->
+      <rect x="280" y="30" width="240" height="280" rx="10" fill="rgba(210,153,34,0.05)" stroke="#d29922" stroke-dasharray="4,3"/>
+      <text x="400" y="55" text-anchor="middle" fill="#d29922" font-size="13" font-weight="700">B. 模仿 (Mimicry)</text>
+      <text x="400" y="75" text-anchor="middle" fill="#8b949e" font-size="10">"伪装成另一种协议"</text>
+
+      <g transform="translate(300,95)">
+        <rect x="0" y="0" width="200" height="40" rx="6" fill="#161b22" stroke="#d29922"/>
+        <text x="100" y="17" text-anchor="middle" fill="#e6edf3" font-size="11">SS + v2ray-plugin</text>
+        <text x="100" y="32" text-anchor="middle" fill="#8b949e" font-size="9">(WebSocket 模式)</text>
+      </g>
+
+      <text x="400" y="160" text-anchor="middle" fill="#8b949e" font-size="10">思路：加一层 HTTP 外壳</text>
+      <text x="400" y="180" text-anchor="middle" fill="#d29922" font-size="11">⚠ 可能"形似神不似"</text>
+
+      <g transform="translate(300,210)">
+        <rect x="0" y="0" width="200" height="30" rx="6" fill="#21262d" stroke="#30363d"/>
+        <text x="100" y="20" text-anchor="middle" fill="#8b949e" font-size="10">审查者可能发现差异（时序/大小）</text>
+      </g>
+      <text x="400" y="260" text-anchor="middle" fill="#8b949e" font-size="10">需要配合真实 Web 服务使用</text>
+      <text x="400" y="285" text-anchor="middle" fill="#3fb950" font-size="10">中等对抗强度</text>
+
+      <!-- 分类C: 隧道 -->
+      <rect x="540" y="30" width="240" height="280" rx="10" fill="rgba(63,185,80,0.05)" stroke="#3fb950" stroke-dasharray="4,3"/>
+      <text x="660" y="55" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="700">C. 隧道 (Tunneling)</text>
+      <text x="660" y="75" text-anchor="middle" fill="#8b949e" font-size="10">"真正运行在另一协议上"</text>
+
+      <g transform="translate(560,95)">
+        <rect x="0" y="0" width="200" height="40" rx="6" fill="#161b22" stroke="#3fb950"/>
+        <text x="100" y="17" text-anchor="middle" fill="#e6edf3" font-size="11">Trojan over TLS</text>
+        <text x="100" y="32" text-anchor="middle" fill="#8b949e" font-size="9">VLESS-REALITY</text>
+      </g>
+
+      <text x="660" y="160" text-anchor="middle" fill="#8b949e" font-size="10">思路：用真实 TLS 握手</text>
+      <text x="660" y="180" text-anchor="middle" fill="#3fb950" font-size="11">✅ 从字节到时序都真实</text>
+
+      <g transform="translate(560,210)">
+        <rect x="0" y="0" width="200" height="30" rx="6" fill="#21262d" stroke="#30363d"/>
+        <text x="100" y="20" text-anchor="middle" fill="#8b949e" font-size="10">与正常 HTTPS 流量无法区分</text>
+      </g>
+      <text x="660" y="260" text-anchor="middle" fill="#8b949e" font-size="10">主动探测遇到会被转发到真 Web 服务</text>
+      <text x="660" y="285" text-anchor="middle" fill="#3fb950" font-size="10">目前最强对抗方式</text>
+    </svg>
+    <div class="diagram-caption">三类混淆的对抗强度：<strong>随机化 &lt; 模仿 &lt; 隧道</strong>。核心论文 <em>The Parrot is Dead</em> (Houmansadr 2013) 论证了"模仿"注定无法完美</div>
+  </div>
+
+  <div class="sub-head">🦜 "鹦鹉必死" 定理</div>
+
+  <div class="highlight-box">
+    <h4>The Parrot is Dead: Observing Unobservable Network Communications</h4>
+    <p>2013 年 Houmansadr 等人发表的这篇论文指出：<strong>"模仿"某个协议永远无法做到完美</strong>，因为被模仿的协议背后有大量的"生态"——错误处理、TCP 层行为、实现细节差异、服务器软件版本指纹…… 一个"模仿者"想假装自己是 Skype 或 HTTP，总会在某些细节上露馅。</p>
+    <p style="margin-top:8px">这就是为什么后来的协议设计转向了"<strong>直接使用真实的协议</strong>"——不是模仿 TLS，而是<strong>真的跑 TLS</strong>；不是模仿 HTTP，而是<strong>真的跑在 HTTP 里面</strong>。</p>
+  </div>
+
+  <div class="sub-head">🔧 流量混淆的本质是"代价"</div>
+
+  <div class="card">
+    <h4>每一层混淆都有代价</h4>
+    <ul>
+      <li><strong>性能开销</strong>：多一层封装就多一次加解密、多一次协议解析</li>
+      <li><strong>带宽开销</strong>：HTTP 头、WebSocket 帧头、TLS 握手字节都要算</li>
+      <li><strong>延迟增加</strong>：握手次数变多，首字节时间（TTFB）变长</li>
+      <li><strong>配置复杂度</strong>：需要域名、证书、反向代理、真实 Web 后端</li>
+    </ul>
+    <p style="margin-top:8px">所以并没有"最好的混淆方案"——只有"在你所处网络环境下足够用"的方案。审查弱的环境，无混淆的 SS 就够；审查强的环境，可能需要完整的 TLS + 真 Web 伪装。</p>
+  </div>
+</section>
+
+
+<!-- ========== SECTION 8 ========== -->
+<section class="section" id="s8">
+  <div class="section-head">
+    <div class="section-num">8</div>
+    <h2>WebSocket 伪装原理</h2>
+  </div>
+
+  <p>WebSocket 是 HTML5 引入的一个应用层协议（RFC 6455），最初为了让浏览器能和服务器保持<strong>全双工长连接</strong>（实时聊天、游戏、股票行情等）。它被大量用于代理协议的"外衣"层，理解它的原理很有价值。</p>
+
+  <div class="sub-head">🔌 WebSocket 的 HTTP 升级握手</div>
+
+  <p>WebSocket 的精妙之处是：它<strong>借用 HTTP 建立连接</strong>，然后"升级"成自己的协议。这使得它在 HTTP/HTTPS 生态里看起来完全正常。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 330" width="100%">
+      <line x1="120" y1="40" x2="120" y2="300" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="660" y1="40" x2="660" y2="300" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <rect x="60" y="20" width="120" height="30" rx="6" fill="#1f6feb"/>
+      <text x="120" y="40" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">客户端</text>
+
+      <rect x="600" y="20" width="120" height="30" rx="6" fill="#2a6e3a"/>
+      <text x="660" y="40" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">服务器</text>
+
+      <defs>
+        <marker id="wsA" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 7,3 0,6" fill="#58a6ff"/>
+        </marker>
+        <marker id="wsB" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 7,3 0,6" fill="#3fb950"/>
+        </marker>
+        <marker id="wsC" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 7,3 0,6" fill="#bc8cff"/>
+        </marker>
+      </defs>
+
+      <!-- 阶段1: HTTP 请求 -->
+      <rect x="155" y="65" width="470" height="55" rx="6" fill="rgba(88,166,255,0.08)" stroke="#58a6ff" stroke-dasharray="3,2"/>
+      <text x="390" y="82" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">① HTTP GET 升级请求</text>
+      <text x="390" y="98" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">GET /chat HTTP/1.1</text>
+      <text x="390" y="112" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">Upgrade: websocket  Connection: Upgrade</text>
+      <line x1="120" y1="90" x2="150" y2="90" stroke="#58a6ff" stroke-width="2"/>
+      <line x1="630" y1="90" x2="660" y2="90" stroke="#58a6ff" stroke-width="2" marker-end="url(#wsA)"/>
+
+      <!-- 阶段2: HTTP 响应 -->
+      <rect x="155" y="135" width="470" height="55" rx="6" fill="rgba(63,185,80,0.08)" stroke="#3fb950" stroke-dasharray="3,2"/>
+      <text x="390" y="152" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">② HTTP 101 Switching Protocols</text>
+      <text x="390" y="168" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">HTTP/1.1 101 Switching Protocols</text>
+      <text x="390" y="182" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">Upgrade: websocket</text>
+      <line x1="660" y1="160" x2="630" y2="160" stroke="#3fb950" stroke-width="2"/>
+      <line x1="150" y1="160" x2="120" y2="160" stroke="#3fb950" stroke-width="2" marker-end="url(#wsB)"/>
+
+      <!-- 阶段3: 协议升级 -->
+      <rect x="140" y="210" width="500" height="40" rx="6" fill="rgba(188,140,255,0.08)" stroke="#bc8cff" stroke-width="2"/>
+      <text x="390" y="230" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">🔄 协议已升级！TCP 连接不关闭，切换到 WebSocket 帧格式</text>
+      <text x="390" y="245" text-anchor="middle" fill="#8b949e" font-size="10">后续：WebSocket Frame (opcode + mask + payload)</text>
+
+      <!-- 阶段4: 双向传输 -->
+      <line x1="120" y1="275" x2="660" y2="275" stroke="#bc8cff" stroke-width="2" marker-end="url(#wsC)"/>
+      <line x1="660" y1="290" x2="120" y2="290" stroke="#bc8cff" stroke-width="2" marker-end="url(#wsC)"/>
+      <text x="390" y="305" text-anchor="middle" fill="#bc8cff" font-size="11">全双工帧传输（二进制 payload 可以是任何东西）</text>
+    </svg>
+    <div class="diagram-caption">WebSocket 握手完全是标准 HTTP，审查系统看到的前两个包和正常 HTTP 请求无异</div>
+  </div>
+
+  <div class="sub-head">🎭 为什么 WebSocket 适合做混淆层</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>✅ 优点</h4>
+      <ul>
+        <li>握手就是标准 HTTP——审查系统必须允许</li>
+        <li>可以走 CDN（Cloudflare、fastly 等都原生支持 WebSocket）</li>
+        <li>升级后的帧 payload 是二进制的，放什么都行</li>
+        <li>浏览器原生支持，看起来和普通网页一样</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>⚠️ 缺点</h4>
+      <ul>
+        <li>握手本身是明文 HTTP，必须额外套 TLS（即 wss://）</li>
+        <li>每个 WebSocket 帧有 2-14 字节的头，带来开销</li>
+        <li>WebSocket 本身不是为"大流量转发"设计的，有时序特征</li>
+        <li>如果 Host 头域名不是真实网站，审查可能识别</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sub-head">🔀 完整的流量栈：SS + WebSocket + TLS</div>
+
+  <div class="card">
+    <h4>数据的多层封装（以流行配置为例）</h4>
+    <div class="bytes">
+      <span class="byte" style="background:rgba(63,185,80,0.2); color:var(--green); border-color:var(--green)">用户原始请求</span>
+      <span class="byte" style="color:var(--text2)">→</span>
+      <span class="byte salt">SS AEAD 加密</span>
+      <span class="byte" style="color:var(--text2)">→</span>
+      <span class="byte" style="background:rgba(188,140,255,0.2); color:var(--purple); border-color:var(--purple)">WebSocket 帧</span>
+      <span class="byte" style="color:var(--text2)">→</span>
+      <span class="byte" style="background:rgba(88,166,255,0.2); color:var(--blue); border-color:var(--blue)">TLS 加密</span>
+      <span class="byte" style="color:var(--text2)">→</span>
+      <span class="byte" style="background:rgba(210,153,34,0.2); color:var(--orange); border-color:var(--orange)">TCP</span>
+    </div>
+    <p style="margin-top:10px">审查系统逐层剥开：</p>
+    <ul>
+      <li>TCP 层：看到一个正常的 443 端口连接</li>
+      <li>TLS 层：看到正常的 TLS 握手（SNI 指向你的域名）——无法解密</li>
+      <li>HTTP 层：如果审查者获得了 TLS 内容（不可能），会看到一个 WebSocket 升级请求</li>
+      <li>WebSocket 层：再深入，就是 SS 加密的字节流，不知道密钥永远看不到明文</li>
+    </ul>
+    <p style="margin-top:10px"><strong>每一层都是合理的、正常的协议</strong>，这才是"混淆"真正该有的样子。</p>
+  </div>
+</section>
+
+
+<!-- ========== SECTION 9 ========== -->
+<section class="section" id="s9">
+  <div class="section-head">
+    <div class="section-num">9</div>
+    <h2>代理协议的演进史</h2>
+  </div>
+
+  <p>从 2012 年至今，代理协议经历了清晰的演进轨迹，本质是审查技术与反审查技术的"军备竞赛"。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 480" width="100%">
+      <!-- 时间轴 -->
+      <line x1="60" y1="50" x2="60" y2="460" stroke="#30363d" stroke-width="3"/>
+
+      <!-- 2012 -->
+      <circle cx="60" cy="80" r="8" fill="#58a6ff"/>
+      <rect x="90" y="55" width="680" height="60" rx="8" fill="#161b22" stroke="#58a6ff"/>
+      <text x="100" y="78" fill="#58a6ff" font-size="12" font-weight="700">2012 — Shadowsocks 诞生</text>
+      <text x="100" y="96" fill="#8b949e" font-size="11">克服了 OpenVPN 等方案的明显协议特征，用对称加密封装 SOCKS5，提供轻量方案。</text>
+      <text x="100" y="108" fill="#8b949e" font-size="10">代表技术：RC4-MD5, AES-CFB — 当时尚无主动探测</text>
+
+      <!-- 2015 -->
+      <circle cx="60" cy="160" r="8" fill="#d29922"/>
+      <rect x="90" y="135" width="680" height="60" rx="8" fill="#161b22" stroke="#d29922"/>
+      <text x="100" y="158" fill="#d29922" font-size="12" font-weight="700">2015 — 主动探测曝光</text>
+      <text x="100" y="176" fill="#8b949e" font-size="11">学术论文首次系统记录 GFW 的主动探测。SS 的"随机字节流"特征被工业化识别。</text>
+      <text x="100" y="188" fill="#8b949e" font-size="10">文献：Ensafi et al., "Examining How the Great Firewall Discovers Hidden Circumvention Servers"</text>
+
+      <!-- 2017 -->
+      <circle cx="60" cy="240" r="8" fill="#3fb950"/>
+      <rect x="90" y="215" width="680" height="60" rx="8" fill="#161b22" stroke="#3fb950"/>
+      <text x="100" y="238" fill="#3fb950" font-size="12" font-weight="700">2017 — SS 升级到 AEAD + obfs/v2ray-plugin</text>
+      <text x="100" y="256" fill="#8b949e" font-size="11">密码学层升级到 AEAD 防篡改。外层加入混淆 plugin（obfs 伪装 HTTP、v2ray-plugin 基于 WebSocket）。</text>
+      <text x="100" y="268" fill="#8b949e" font-size="10">代表：ChaCha20-Poly1305, simple-obfs, v2ray-plugin</text>
+
+      <!-- 2018 -->
+      <circle cx="60" cy="320" r="8" fill="#bc8cff"/>
+      <rect x="90" y="295" width="680" height="60" rx="8" fill="#161b22" stroke="#bc8cff"/>
+      <text x="100" y="318" fill="#bc8cff" font-size="12" font-weight="700">2018-2019 — Trojan / VMess 等 TLS 内嵌协议</text>
+      <text x="100" y="336" fill="#8b949e" font-size="11">Trojan 把代理流量直接跑在 TLS 里，并要求配合真实 Web 后端，主动探测会被转发到真网页。</text>
+      <text x="100" y="348" fill="#8b949e" font-size="10">代表：Trojan, VMess+WebSocket+TLS, VLESS</text>
+
+      <!-- 2022 -->
+      <circle cx="60" cy="400" r="8" fill="#f85149"/>
+      <rect x="90" y="375" width="680" height="60" rx="8" fill="#161b22" stroke="#f85149"/>
+      <text x="100" y="398" fill="#f85149" font-size="12" font-weight="700">2022+ — TLS 指纹识别 & Reality</text>
+      <text x="100" y="416" fill="#8b949e" font-size="11">审查升级到识别 TLS 指纹（JA3）、证书异常。Reality 协议借用真实大网站的证书做握手，无需自己申请证书。</text>
+      <text x="100" y="428" fill="#8b949e" font-size="10">代表：uTLS 指纹模拟, VLESS-XTLS-Reality, Hysteria2 (QUIC-based)</text>
+    </svg>
+    <div class="diagram-caption">十年演进轨迹：从"别看"到"看了也没用"再到"看起来就是正常网站"</div>
+  </div>
+
+  <div class="sub-head">🔮 未来趋势</div>
+
+  <div class="grid-auto">
+    <div class="card">
+      <h4>🌊 QUIC / HTTP/3 成主流</h4>
+      <p>UDP-based 协议（如 Hysteria2）能绕开 TCP 层审查，对拥塞控制有更多灵活性。HTTP/3 在互联网占比持续上升，基于它的代理越来越难区分。</p>
+    </div>
+    <div class="card">
+      <h4>🤖 机器学习对抗</h4>
+      <p>审查方开始用 ML 模型做流量分类（基于流量时序特征）。反制手段是引入随机填充、时序扰动，让流量"看起来像"随机的真实浏览行为。</p>
+    </div>
+    <div class="card">
+      <h4>🌐 CDN 依赖</h4>
+      <p>把代理流量经过 Cloudflare 等大型 CDN，让审查者面临"封 CDN = 断大半个互联网"的抉择。这是一种"人质策略"。</p>
+    </div>
+    <div class="card">
+      <h4>📱 协议融合</h4>
+      <p>代理协议越来越和正常协议"融合"——不再是独立协议，而是 HTTPS/QUIC 的一个应用层使用场景。</p>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🎓 学习这段历史的意义</h4>
+    <p>理解这个"军备竞赛"轨迹，你就能预判协议设计的<strong>底层逻辑</strong>：任何让你看起来"与众不同"的方案都会失败；任何"让你和大流量混在一起"的方案都会有更长的生命周期。这不仅适用于代理协议，也适用于所有需要对抗识别的系统（反爬虫、隐私保护、匿名通信）。</p>
+  </div>
+</section>
+
+
+<!-- ========== SECTION 10 ========== -->
+<section class="section" id="s10">
+  <div class="section-head">
+    <div class="section-num">10</div>
+    <h2>知识测验</h2>
+  </div>
+
+  <p class="muted">用这些题目检验一下你的理解程度。答错不要紧，每题都附有详细解释。</p>
+
+  <div class="quiz" data-correct="B">
+    <h4>Q1. Shadowsocks 的"纯随机字节流"设计，为什么反而成了它被识别的特征？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 随机数据需要更多带宽</li>
+      <li data-k="B" onclick="checkQuiz(this,true)">B. 正常的互联网协议（HTTP/TLS/SSH）都有明确格式，"全随机"在互联网上反而罕见</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 随机数据会让防火墙 CPU 压力增大</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 随机数据会导致丢包率升高</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>B</strong>。互联网上 99% 的流量都有明显的协议头（HTTP 的方法和路径、TLS 的 Record 字段、SSH 的版本字符串），一个从第一个字节就开始随机的 TCP 流是极度异常的。审查系统通过熵值统计可以很轻松地发现这类流量。这就是反直觉的"隐身悖论"：想完全无特征，反而让无特征成了特征。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="C">
+    <h4>Q2. AEAD 加密模式的"AE"（Authenticated Encryption）解决了什么关键问题？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 让加密速度变快</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 让密钥长度变短</li>
+      <li data-k="C" onclick="checkQuiz(this,true)">C. 同时提供保密性和完整性，防止密文被篡改</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 减少网络带宽消耗</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>C</strong>。早期的流加密（如 AES-CFB）只提供保密性，攻击者虽然看不到明文，但可以翻转密文中的某些位来篡改明文内容（Bit-flipping 攻击），甚至构造"假冒的合法请求"让服务器处理。AEAD 通过一个认证标签（MAC）验证密文完整性，一旦被修改解密就会失败。这也让 SS 服务器对"错误数据"的反应变得非常确定——直接拒绝——但这个反应本身又成了主动探测的信号。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="B">
+    <h4>Q3. 主动探测（Active Probing）的核心攻击思路是什么？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 暴力破解 Shadowsocks 的密码</li>
+      <li data-k="B" onclick="checkQuiz(this,true)">B. 主动向可疑服务器发探测包，根据服务器的响应模式（或沉默）来判断它运行什么协议</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 窃取 CA 的证书私钥解密 TLS</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 在客户端植入木马</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>B</strong>。主动探测不破解加密——加密是安全的。它的威力在于利用<strong>服务器行为的可观察性</strong>：发送不同类型的探测包（随机数据、TLS Hello、HTTP GET），每种服务的响应模式都不同。SS 服务器遇到错误数据"静默读取后关闭"的模式在正常 Web 服务中极其罕见，这就是它的识别特征。这属于典型的"侧信道攻击"。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="D">
+    <h4>Q4. 根据"鹦鹉必死"（The Parrot is Dead）定理，为什么"模仿"一个协议注定不完美？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 因为协议规范总在变化</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 因为加密算法不够强</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 因为浏览器会主动举报</li>
+      <li data-k="D" onclick="checkQuiz(this,true)">D. 真实协议背后有整个生态（错误处理、时序、实现差异），模仿者很难百分之百复刻</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>D</strong>。一个真实的 Skype 客户端背后有：音视频编码、特定的 P2P 行为、连接保活、错误重试模式、用户交互节奏……一个代理"装成 Skype"时，这些侧面特征几乎不可能完全伪造。解决思路是：<strong>不模仿，而是真的使用</strong>。比如 Trojan-GFW 使用真实的 TLS + 真实的 Web 服务器，让错误响应走到真的 Nginx/Apache 上，这样"假装"本身就变成了"真实"。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="A">
+    <h4>Q5. 为什么说"代理 ≠ 匿名"？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,true)">A. 代理服务商能看到你的 IP 和目标地址，信任只是从 ISP 转移到了代理方</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 代理无法加密流量</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 代理会把你的数据上传到公网</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 代理只能代理 HTTP，不能代理 HTTPS</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>A</strong>。代理的"加密"只覆盖你到代理服务器这一段，代理服务器本身必须知道你的真实 IP（否则无法返回数据）和你要访问的目标。代理服务商的日志、监管要求、被攻击泄露都是风险点。真正的匿名通信需要像 Tor 那样的多跳设计（每一跳只知道前后一跳），或者零信任架构。此外，即使通信加密了，<strong>元数据</strong>（连接时间、流量大小、频率模式）仍然能被观察并用于流量分析。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="C">
+    <h4>Q6. 把代理流量封装在 WebSocket + TLS 里的主要优势是什么？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 加密强度比 AEAD 更高</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 数据传输速度更快</li>
+      <li data-k="C" onclick="checkQuiz(this,true)">C. 每一层都是真实、合理的协议，审查系统封它就等于封了大量正常流量</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 可以绕过所有密码学验证</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>C</strong>。这种封装的威力不是"更安全"（SS 本身的加密已经够好了），而是"<strong>让流量看起来极其普通</strong>"。审查系统看到的是：443 端口的 TLS 连接、标准 HTTP 升级到 WebSocket、WebSocket 帧传输二进制数据——这些都是正常应用（视频会议、聊天软件、实时股票行情）每天产生的流量。要封禁这类特征，就会误伤大量合法应用，<strong>审查成本变得无法接受</strong>。代价是性能——多层封装有额外开销。
+    </div>
+  </div>
+
+  <div class="quiz" data-correct="B">
+    <h4>Q7. 为什么 ChaCha20-Poly1305 在移动设备上通常比 AES-GCM 更快？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. ChaCha20 的密钥更短</li>
+      <li data-k="B" onclick="checkQuiz(this,true)">B. ChaCha20 是为软件实现优化的，在没有 AES-NI 硬件加速的 ARM 芯片上不需要专用指令</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. ChaCha20 的加密强度更弱，所以更快</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. ChaCha20 跳过了完整性校验</li>
+    </ul>
+    <div class="quiz-explain">
+      正确答案是 <strong>B</strong>。现代 x86 CPU 通常内置 AES-NI 指令集，AES 可以做到几 GB/s 的加解密速度。但手机、路由器、嵌入式设备用的 ARM 芯片很多都没有 AES 硬件加速。ChaCha20 的设计哲学是"只使用基础的加、异或、位移操作"，这些在任何 CPU 上都很快，因此软件实现就能达到很高的吞吐。Google 在 2014 年将 ChaCha20-Poly1305 引入 TLS，就是看中它在移动端的优势。
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🎯 恭喜完成！</h4>
+    <p>如果你能答对大部分题目，说明你已经建立了完整的认知框架：<strong>从协议设计 → 密码学基础 → 审查原理 → 混淆思路 → 协议演进</strong>。这些原理不仅适用于代理系统，也是网络安全、隐私工程、反侦测通信的基础知识。</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<footer>
+  <p>📚 本文档为纯技术原理学习材料，基于公开发表的学术论文与协议标准整理。</p>
+  <p style="color:var(--text3)">
+    参考文献：Ensafi et al. (USENIX '15) · Houmansadr et al. (NDSS '13) · Xue et al. (USENIX '22) · Wu et al. (USENIX '23) · RFC 6455 · RFC 7539 · Shadowsocks Protocol Spec
+  </p>
+  <p style="margin-top:14px; color:var(--yellow)">⚠ 请遵守所在地法律法规，将所学原理用于合法学习、研究与白帽安全测试</p>
+</footer>
+
+<script>
+// Theme toggle
+function toggleTheme(){
+  const html = document.documentElement;
+  const cur = html.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  const icon = document.getElementById('theme-icon');
+  if(next === 'light'){
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  } else {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+}
+
+// Mobile sidebar
+function toggleMenu(){
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// Sidebar active link on scroll
+const navLinks = document.querySelectorAll('.sidebar a');
+const sections = document.querySelectorAll('.section');
+function updateActiveLink(){
+  let cur = '';
+  sections.forEach(s => {
+    if(window.scrollY >= s.offsetTop - 120) cur = s.getAttribute('id');
+  });
+  navLinks.forEach(l => {
+    l.classList.remove('active');
+    if(l.getAttribute('href') === '#' + cur) l.classList.add('active');
+  });
+}
+window.addEventListener('scroll', updateActiveLink);
+
+// Close mobile menu on nav click
+navLinks.forEach(l => {
+  l.addEventListener('click', () => {
+    if(window.innerWidth <= 900) toggleMenu();
+  });
+});
+
+// Probe animation
+let probeTimer = null;
+function playProbe(){
+  resetProbe();
+  const steps = document.querySelectorAll('#probeStage .probe-step');
+  let i = 0;
+  probeTimer = setInterval(() => {
+    if(i < steps.length){
+      steps[i].classList.add('active');
+      i++;
+    } else {
+      clearInterval(probeTimer);
+    }
+  }, 700);
+}
+function resetProbe(){
+  if(probeTimer) clearInterval(probeTimer);
+  document.querySelectorAll('#probeStage .probe-step').forEach(s => s.classList.remove('active'));
+}
+
+// Quiz
+function checkQuiz(li, isCorrect){
+  const quiz = li.closest('.quiz');
+  if(quiz.classList.contains('answered')) return;
+  quiz.classList.add('answered');
+  const opts = quiz.querySelectorAll('.quiz-opts li');
+  opts.forEach(o => { o.style.cursor = 'default'; o.onclick = null; });
+  if(isCorrect){
+    li.classList.add('correct');
+  } else {
+    li.classList.add('wrong');
+    // highlight the correct one
+    const correctKey = quiz.getAttribute('data-correct');
+    opts.forEach(o => {
+      if(o.getAttribute('data-k') === correctKey) o.classList.add('correct');
+    });
+  }
+  quiz.querySelector('.quiz-explain').classList.add('show');
+}
+</script>
+
+</body>
+</html>
