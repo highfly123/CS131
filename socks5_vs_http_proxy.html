@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOCKS5 vs HTTP/HTTPS 代理 — 深度对比图解</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
+  --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#30363d;
+  --blue:#58a6ff; --green:#3fb950; --orange:#d29922;
+  --red:#f85149; --purple:#bc8cff; --cyan:#39d0d8;
+  --socks:#58a6ff; --http:#d29922;
+  --radius:12px;
+  --mono:'SF Mono','Cascadia Code','Fira Code',Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+[data-theme="light"]{
+  --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2;
+  --text:#1f2328; --text2:#656d76; --text3:#8b949e;
+  --border:#d0d7de;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{
+  font-family:var(--sans);
+  background:var(--bg); color:var(--text);
+  line-height:1.75;
+  transition:background .3s, color .3s;
+}
+
+/* Header */
+.header{
+  position:fixed; top:0; left:0; right:0; height:64px;
+  background:rgba(22,27,34,0.88); backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 24px; z-index:100;
+}
+[data-theme="light"] .header{background:rgba(246,248,250,0.88)}
+.header-title{
+  font-size:1.02rem; font-weight:600;
+  display:flex; align-items:center; gap:10px;
+}
+.header-controls{display:flex; gap:10px; align-items:center}
+.theme-btn, .menu-btn{
+  width:38px; height:38px; border-radius:10px;
+  background:var(--bg3); border:1px solid var(--border);
+  color:var(--text); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all .2s;
+}
+.theme-btn:hover{border-color:var(--blue); color:var(--blue)}
+.menu-btn{display:none}
+
+/* Hero */
+.hero{
+  margin-top:64px;
+  padding:70px 24px 50px;
+  text-align:center;
+  background:
+    radial-gradient(ellipse at 15% 0%, rgba(88,166,255,0.14), transparent 55%),
+    radial-gradient(ellipse at 85% 30%, rgba(210,153,34,0.1), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  border-bottom:1px solid var(--border);
+}
+.hero h1{
+  font-size:2.4rem; font-weight:800; line-height:1.25;
+  margin-bottom:14px;
+}
+.hero .vs{
+  display:inline-block;
+  background:linear-gradient(135deg, var(--socks), var(--http));
+  -webkit-background-clip:text;
+  background-clip:text;
+  -webkit-text-fill-color:transparent;
+  font-weight:900;
+}
+.hero p{
+  color:var(--text2); font-size:1.08rem;
+  max-width:700px; margin:0 auto 22px;
+}
+.hero-tags{display:flex; justify-content:center; gap:10px; flex-wrap:wrap}
+.hero-tag{
+  padding:6px 14px; border-radius:20px;
+  background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.3);
+  color:var(--blue); font-size:.85rem;
+}
+
+/* Layout */
+.layout{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  max-width:1280px;
+  margin:0 auto;
+  gap:40px;
+  padding:40px 24px;
+}
+.sidebar{
+  position:sticky; top:88px;
+  align-self:start;
+  max-height:calc(100vh - 104px);
+  overflow-y:auto;
+}
+.sidebar h5{
+  font-size:.75rem; text-transform:uppercase;
+  letter-spacing:1.2px; color:var(--text3);
+  margin-bottom:12px; padding-left:14px;
+}
+.sidebar a{
+  display:block; padding:9px 14px;
+  color:var(--text2); text-decoration:none;
+  font-size:.88rem; border-left:2px solid transparent;
+  border-radius:0 8px 8px 0;
+  transition:all .2s;
+}
+.sidebar a:hover{color:var(--text); background:var(--bg2)}
+.sidebar a.active{
+  color:var(--blue); border-left-color:var(--blue);
+  background:rgba(88,166,255,0.08);
+  font-weight:600;
+}
+.main{min-width:0}
+
+/* Sections */
+.section{margin-bottom:56px}
+.section-head{
+  display:flex; align-items:center; gap:14px;
+  margin-bottom:22px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+.section-num{
+  width:42px; height:42px; border-radius:12px;
+  background:linear-gradient(135deg, var(--socks), var(--http));
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-weight:800; font-size:1.1rem;
+  flex-shrink:0;
+}
+.section-head h2{font-size:1.5rem; font-weight:700}
+.section p{margin-bottom:14px}
+.section p.muted{color:var(--text2)}
+
+.sub-head{
+  font-size:1.12rem; font-weight:600;
+  margin:24px 0 12px;
+  display:flex; align-items:center; gap:10px;
+}
+.sub-head::before{
+  content:''; width:4px; height:20px;
+  border-radius:2px; background:var(--blue);
+}
+
+/* Cards */
+.card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px 22px;
+  margin:14px 0;
+}
+.card h4{color:var(--orange); font-size:1rem; margin-bottom:8px}
+.card p, .card li{color:var(--text2); font-size:.92rem}
+.card ul{padding-left:22px; margin-top:6px}
+.card li{margin-bottom:4px}
+.card code{
+  font-family:var(--mono); font-size:.85em;
+  background:var(--bg3); color:var(--orange);
+  padding:2px 7px; border-radius:4px;
+}
+
+/* Colored cards */
+.card.socks{border-left:4px solid var(--socks)}
+.card.socks h4{color:var(--socks)}
+.card.http{border-left:4px solid var(--http)}
+.card.http h4{color:var(--http)}
+
+.highlight-box{
+  background:linear-gradient(135deg, rgba(88,166,255,0.1), rgba(188,140,255,0.05));
+  border:1px solid rgba(88,166,255,0.3);
+  border-radius:var(--radius);
+  padding:16px 20px;
+  margin:16px 0;
+}
+.highlight-box h4{color:var(--blue); margin-bottom:6px}
+.highlight-box p{color:var(--text); font-size:.93rem}
+
+.warn-box{
+  background:rgba(210,153,34,0.08);
+  border:1px solid rgba(210,153,34,0.35);
+  border-left:4px solid var(--orange);
+  border-radius:var(--radius);
+  padding:14px 20px;
+  margin:16px 0;
+}
+.warn-box h4{color:var(--orange); margin-bottom:4px; font-size:.95rem}
+.warn-box p{color:var(--text2); font-size:.88rem}
+
+/* Diagrams */
+.diagram{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;
+  margin:18px 0;
+  overflow-x:auto;
+}
+.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
+.diagram-caption{
+  text-align:center; color:var(--text2);
+  font-size:.85rem; margin-top:12px; font-style:italic;
+}
+
+/* Grid */
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0}
+.grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:16px 0}
+
+/* Tags */
+.tag{
+  display:inline-block;
+  padding:2px 10px; border-radius:20px;
+  font-size:.75rem; font-weight:600;
+  margin:2px 4px 2px 0;
+}
+.tag-socks{background:rgba(88,166,255,0.15); color:var(--socks)}
+.tag-http{background:rgba(210,153,34,0.15); color:var(--http)}
+.tag-green{background:rgba(63,185,80,0.15); color:var(--green)}
+.tag-red{background:rgba(248,81,73,0.15); color:var(--red)}
+.tag-gray{background:var(--bg3); color:var(--text2)}
+
+/* Table */
+.table-wrap{
+  overflow-x:auto;
+  border-radius:var(--radius);
+  border:1px solid var(--border);
+  margin:16px 0;
+}
+table{width:100%; border-collapse:collapse; font-size:.9rem}
+th{
+  background:var(--bg3); color:var(--text);
+  text-align:left; padding:12px 16px;
+  font-weight:600; font-size:.82rem;
+  text-transform:uppercase; letter-spacing:.5px;
+}
+td{
+  padding:12px 16px; color:var(--text2);
+  border-top:1px solid var(--border);
+  vertical-align:top;
+}
+td strong{color:var(--text)}
+tr:hover td{background:var(--bg2)}
+
+/* Tab selector */
+.tabs{
+  display:flex; gap:4px; margin:18px 0;
+  border-bottom:2px solid var(--border);
+}
+.tab{
+  padding:10px 20px;
+  background:transparent; border:none;
+  color:var(--text2); cursor:pointer;
+  font-size:.92rem; font-weight:600;
+  border-bottom:3px solid transparent;
+  margin-bottom:-2px;
+  transition:all .2s;
+  font-family:var(--sans);
+}
+.tab:hover{color:var(--text)}
+.tab.active.socks-tab{color:var(--socks); border-bottom-color:var(--socks)}
+.tab.active.http-tab{color:var(--http); border-bottom-color:var(--http)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Packet bytes */
+.bytes{
+  display:flex; flex-wrap:wrap; gap:4px;
+  font-family:var(--mono); font-size:.75rem;
+  margin:12px 0;
+}
+.byte{
+  padding:6px 10px; border-radius:4px;
+  background:var(--bg3); color:var(--text);
+  border:1px solid var(--border);
+  text-align:center;
+  min-width:60px;
+}
+.byte small{display:block; font-size:.65rem; color:var(--text3); margin-top:2px}
+.byte.b1{background:rgba(88,166,255,0.15); border-color:var(--socks); color:var(--socks)}
+.byte.b2{background:rgba(210,153,34,0.15); border-color:var(--http); color:var(--http)}
+.byte.b3{background:rgba(63,185,80,0.15); border-color:var(--green); color:var(--green)}
+.byte.b4{background:rgba(188,140,255,0.15); border-color:var(--purple); color:var(--purple)}
+
+/* Code block */
+.code-block{
+  background:#0a0d12;
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:14px 16px;
+  margin:10px 0;
+  font-family:var(--mono);
+  font-size:.85rem;
+  color:var(--text);
+  overflow-x:auto;
+  line-height:1.6;
+}
+.code-block .kw{color:var(--purple)}
+.code-block .str{color:var(--green)}
+.code-block .cmt{color:var(--text3); font-style:italic}
+.code-block .num{color:var(--orange)}
+
+/* Buttons */
+.btn{
+  padding:9px 18px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:var(--bg3); color:var(--text);
+  cursor:pointer; font-size:.88rem;
+  font-family:var(--sans);
+  transition:all .2s;
+}
+.btn:hover{border-color:var(--blue); color:var(--blue)}
+.btn.primary{background:var(--blue); color:#fff; border-color:var(--blue)}
+.btn-row{display:flex; gap:10px; flex-wrap:wrap; margin:14px 0}
+
+/* Quiz */
+.quiz{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px 22px;
+  margin:14px 0;
+}
+.quiz h4{color:var(--blue); margin-bottom:12px}
+.quiz-opts{list-style:none}
+.quiz-opts li{
+  padding:11px 16px; margin:7px 0;
+  border:1px solid var(--border);
+  border-radius:8px;
+  cursor:pointer;
+  transition:all .2s;
+  font-size:.9rem;
+}
+.quiz-opts li:hover{border-color:var(--blue); background:var(--bg3)}
+.quiz-opts li.correct{border-color:var(--green); background:rgba(63,185,80,0.1); color:var(--green); cursor:default}
+.quiz-opts li.wrong{border-color:var(--red); background:rgba(248,81,73,0.1); color:var(--red); cursor:default}
+.quiz-explain{
+  display:none; margin-top:12px;
+  padding:12px 16px;
+  background:var(--bg3);
+  border-left:3px solid var(--blue);
+  border-radius:0 8px 8px 0;
+  font-size:.88rem; color:var(--text2);
+}
+.quiz-explain.show{display:block}
+
+/* Handshake animation */
+.handshake-stage{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px;
+  margin:14px 0;
+}
+.hs-step{
+  display:flex; gap:12px; align-items:flex-start;
+  padding:10px 14px; margin:6px 0;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:8px;
+  opacity:.3; transform:translateX(-8px);
+  transition:all .4s;
+}
+.hs-step.active{opacity:1; transform:translateX(0)}
+.hs-step.active.client{border-color:var(--socks)}
+.hs-step.active.server{border-color:var(--green)}
+.hs-num{
+  width:28px; height:28px; border-radius:50%;
+  background:var(--bg); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.8rem; flex-shrink:0;
+  border:2px solid var(--border);
+}
+.hs-step.active.client .hs-num{background:var(--socks); border-color:var(--socks)}
+.hs-step.active.server .hs-num{background:var(--green); border-color:var(--green)}
+.hs-text{flex:1; font-size:.88rem}
+.hs-text strong{color:var(--text)}
+.hs-text code{
+  font-family:var(--mono); font-size:.82em;
+  background:var(--bg); padding:1px 6px; border-radius:3px;
+}
+
+/* Footer */
+footer{
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  padding:36px 24px;
+  text-align:center;
+  color:var(--text2);
+  font-size:.88rem;
+}
+
+/* Responsive */
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr; gap:20px}
+  .sidebar{
+    position:fixed; top:64px; left:-280px;
+    width:260px; height:calc(100vh - 64px);
+    background:var(--bg2);
+    border-right:1px solid var(--border);
+    padding:20px 10px;
+    transition:left .3s;
+    z-index:99;
+    max-height:unset;
+  }
+  .sidebar.open{left:0}
+  .menu-btn{display:flex}
+  .hero h1{font-size:1.7rem}
+  .grid-2, .grid-3{grid-template-columns:1fr}
+  .section-head h2{font-size:1.25rem}
+}
+
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-title">
+    <span style="color:var(--socks)">🧦</span>
+    <span>SOCKS5 vs HTTP/HTTPS 代理</span>
+  </div>
+  <div class="header-controls">
+    <button class="theme-btn" onclick="toggleTheme()" title="切换主题">
+      <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>SOCKS5 <span class="vs">vs</span> HTTP/HTTPS 代理</h1>
+  <p>两种最常见的代理协议到底差在哪？从协议层次、握手流程、能做什么、能不能走 UDP、能不能被篡改 … 一份对比讲清楚。</p>
+  <div class="hero-tags">
+    <span class="hero-tag">RFC 1928</span>
+    <span class="hero-tag">HTTP CONNECT</span>
+    <span class="hero-tag">应用层 vs 会话层</span>
+    <span class="hero-tag">通用 vs 专用</span>
+  </div>
+</section>
+
+<div class="layout">
+
+<aside class="sidebar" id="sidebar">
+  <h5>目录</h5>
+  <a href="#s1" class="active">① 一句话区别</a>
+  <a href="#s2">② 协议栈位置</a>
+  <a href="#s3">③ HTTP 代理工作原理</a>
+  <a href="#s4">④ HTTPS 的 CONNECT 方法</a>
+  <a href="#s5">⑤ SOCKS5 工作原理</a>
+  <a href="#s6">⑥ 握手流程对比</a>
+  <a href="#s7">⑦ 能力矩阵对比</a>
+  <a href="#s8">⑧ DNS 行为差异</a>
+  <a href="#s9">⑨ 性能、安全、使用场景</a>
+  <a href="#s10">⑩ 常见疑问与测验</a>
+</aside>
+
+<main class="main">
+
+<!-- ==================== SECTION 1 ==================== -->
+<section class="section" id="s1">
+  <div class="section-head">
+    <div class="section-num">1</div>
+    <h2>一句话讲清区别</h2>
+  </div>
+
+  <div class="grid-2">
+    <div class="card socks">
+      <h4>🧦 SOCKS5 代理</h4>
+      <p style="font-size:1rem;color:var(--text);"><strong>"通用搬运工"</strong>—— 不关心你传的是什么协议，只负责把 TCP/UDP 数据包从 A 点送到 B 点。</p>
+      <ul style="margin-top:8px">
+        <li>工作在 <strong style="color:var(--socks)">会话层（Layer 5）</strong></li>
+        <li>支持 <strong>TCP + UDP</strong></li>
+        <li>协议无关 —— HTTP、SSH、邮件、游戏、BT 都能走</li>
+        <li>RFC 1928（1996 年）</li>
+      </ul>
+    </div>
+    <div class="card http">
+      <h4>🌐 HTTP / HTTPS 代理</h4>
+      <p style="font-size:1rem;color:var(--text);"><strong>"网页专用管家"</strong>—— 理解 HTTP 协议，能解析、修改、缓存 Web 请求，但只服务于浏览器场景。</p>
+      <ul style="margin-top:8px">
+        <li>工作在 <strong style="color:var(--http)">应用层（Layer 7）</strong></li>
+        <li>只支持 <strong>TCP</strong>（基于 HTTP）</li>
+        <li>理解 HTTP 头、方法、URL、Cookie</li>
+        <li>RFC 7231 / 9110</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 核心思路差异</h4>
+    <p>SOCKS5 代理<strong>不看你传什么</strong>——你说"把这堆字节送到 github.com:443"，它就照办。<br>
+    HTTP 代理<strong>必须看懂 HTTP 协议</strong>——它读你的 URL、Host 头，才知道要转给谁。</p>
+  </div>
+
+  <p>下面我们一层层展开，把这两者的差异彻底讲清楚。</p>
+</section>
+
+
+<!-- ==================== SECTION 2 ==================== -->
+<section class="section" id="s2">
+  <div class="section-head">
+    <div class="section-num">2</div>
+    <h2>它们在协议栈的哪一层？</h2>
+  </div>
+
+  <p>理解两者的位置差异是理解一切其他差异的基础。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 380" width="100%">
+      <!-- OSI 7 层模型 -->
+      <text x="400" y="28" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">OSI 七层模型中的位置</text>
+
+      <!-- Layer 7 -->
+      <rect x="80" y="50" width="640" height="44" rx="8" fill="rgba(210,153,34,0.15)" stroke="#d29922" stroke-width="2"/>
+      <text x="130" y="78" fill="#d29922" font-size="13" font-weight="700">L7 应用层</text>
+      <text x="250" y="78" fill="#8b949e" font-size="12">HTTP, HTTPS, FTP, SMTP, DNS</text>
+      <rect x="540" y="57" width="170" height="30" rx="5" fill="rgba(210,153,34,0.3)" stroke="#d29922"/>
+      <text x="625" y="77" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">HTTP 代理在这里</text>
+
+      <!-- Layer 6 -->
+      <rect x="80" y="102" width="640" height="32" rx="6" fill="var(--bg3)" stroke="var(--border)"/>
+      <text x="130" y="124" fill="#8b949e" font-size="12">L6 表示层</text>
+      <text x="250" y="124" fill="#484f58" font-size="11">数据格式转换、加密</text>
+
+      <!-- Layer 5 -->
+      <rect x="80" y="142" width="640" height="44" rx="8" fill="rgba(88,166,255,0.15)" stroke="#58a6ff" stroke-width="2"/>
+      <text x="130" y="170" fill="#58a6ff" font-size="13" font-weight="700">L5 会话层</text>
+      <text x="250" y="170" fill="#8b949e" font-size="12">RPC, NetBIOS, SOCKS</text>
+      <rect x="540" y="149" width="170" height="30" rx="5" fill="rgba(88,166,255,0.3)" stroke="#58a6ff"/>
+      <text x="625" y="169" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="700">SOCKS5 在这里</text>
+
+      <!-- Layer 4 -->
+      <rect x="80" y="194" width="640" height="32" rx="6" fill="var(--bg3)" stroke="var(--border)"/>
+      <text x="130" y="216" fill="#8b949e" font-size="12">L4 传输层</text>
+      <text x="250" y="216" fill="#484f58" font-size="11">TCP, UDP（两种代理最终都建立在此之上）</text>
+
+      <!-- Layer 3 -->
+      <rect x="80" y="234" width="640" height="32" rx="6" fill="var(--bg3)" stroke="var(--border)"/>
+      <text x="130" y="256" fill="#8b949e" font-size="12">L3 网络层</text>
+      <text x="250" y="256" fill="#484f58" font-size="11">IP</text>
+
+      <!-- Layer 2 / 1 -->
+      <rect x="80" y="274" width="640" height="32" rx="6" fill="var(--bg3)" stroke="var(--border)"/>
+      <text x="130" y="296" fill="#8b949e" font-size="12">L2/L1 链路 / 物理</text>
+      <text x="250" y="296" fill="#484f58" font-size="11">以太网、WiFi</text>
+
+      <!-- 结论 -->
+      <text x="400" y="340" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="700">SOCKS5 更低层 → 更通用 → 什么协议都能搬</text>
+      <text x="400" y="360" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">HTTP 代理更高层 → 更智能 → 理解 Web 语义（Cookie/缓存/Referer）</text>
+    </svg>
+    <div class="diagram-caption">SOCKS5 在更低的会话层，HTTP 代理在更高的应用层 —— 这就是它们所有差异的根源</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🧠 类比：送快递</h4>
+    <p><strong>SOCKS5 像快递员</strong> —— 他不拆你的包裹，也不知道里面是什么。你写上"送到北京朝阳区 XXX"，他就负责送到。<br>
+    <strong>HTTP 代理像"商务秘书"</strong> —— 她会拆开信件读内容，帮你回复、做笔记、归档、转发给相关部门。能力强，但只处理"信件"这一类任务。</p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 3 ==================== -->
+<section class="section" id="s3">
+  <div class="section-head">
+    <div class="section-num">3</div>
+    <h2>HTTP 代理的工作原理</h2>
+  </div>
+
+  <p>HTTP 代理有一个关键特性：它<strong>读懂你的 HTTP 请求</strong>，然后代为转发。</p>
+
+  <div class="sub-head">📬 场景：浏览器通过 HTTP 代理访问网页</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 280" width="100%">
+      <defs>
+        <marker id="httpArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#d29922"/>
+        </marker>
+        <marker id="httpArrG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#3fb950"/>
+        </marker>
+      </defs>
+
+      <!-- 三方节点 -->
+      <rect x="30" y="110" width="130" height="60" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="95" y="140" text-anchor="middle" fill="#e6edf3" font-size="13">浏览器</text>
+      <text x="95" y="158" text-anchor="middle" fill="#8b949e" font-size="10">client</text>
+
+      <rect x="335" y="100" width="140" height="80" rx="8" fill="#161b22" stroke="#d29922" stroke-width="2"/>
+      <text x="405" y="128" text-anchor="middle" fill="#d29922" font-size="13" font-weight="700">HTTP 代理</text>
+      <text x="405" y="148" text-anchor="middle" fill="#8b949e" font-size="10">① 解析 HTTP 请求</text>
+      <text x="405" y="162" text-anchor="middle" fill="#8b949e" font-size="10">② 提取目标 Host</text>
+      <text x="405" y="176" text-anchor="middle" fill="#8b949e" font-size="10">③ 向目标转发</text>
+
+      <rect x="640" y="110" width="130" height="60" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="705" y="140" text-anchor="middle" fill="#e6edf3" font-size="13">目标网站</text>
+      <text x="705" y="158" text-anchor="middle" fill="#8b949e" font-size="10">example.com</text>
+
+      <!-- 请求 -->
+      <line x1="160" y1="130" x2="335" y2="130" stroke="#d29922" stroke-width="2" marker-end="url(#httpArr)"/>
+      <text x="247" y="120" text-anchor="middle" fill="#d29922" font-size="10" font-weight="700">GET http://example.com/ HTTP/1.1</text>
+
+      <line x1="475" y1="130" x2="640" y2="130" stroke="#d29922" stroke-width="2" marker-end="url(#httpArr)"/>
+      <text x="557" y="120" text-anchor="middle" fill="#d29922" font-size="10" font-weight="700">GET / HTTP/1.1</text>
+      <text x="557" y="148" text-anchor="middle" fill="#8b949e" font-size="9">Host: example.com</text>
+
+      <!-- 响应 -->
+      <line x1="640" y1="160" x2="475" y2="160" stroke="#3fb950" stroke-width="2" marker-end="url(#httpArrG)"/>
+      <text x="557" y="180" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="700">HTTP 200 OK + HTML</text>
+
+      <line x1="335" y1="160" x2="160" y2="160" stroke="#3fb950" stroke-width="2" marker-end="url(#httpArrG)"/>
+      <text x="247" y="180" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="700">HTTP 200 OK + HTML</text>
+
+      <!-- 关键点 -->
+      <text x="405" y="230" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">关键点：代理"看到"了完整 HTTP 请求的内容</text>
+      <text x="405" y="250" text-anchor="middle" fill="#8b949e" font-size="11">URL、Host 头、Cookie、User-Agent 全部可读可改</text>
+    </svg>
+    <div class="diagram-caption">注意客户端发给代理的请求是"绝对 URL"（<code>GET http://...</code>），而不是普通的相对路径</div>
+  </div>
+
+  <div class="sub-head">🔍 客户端发给 HTTP 代理的请求长什么样</div>
+
+  <p>这是关键细节，容易被忽略：</p>
+
+  <div class="grid-2">
+    <div>
+      <p style="color:var(--text2);margin-bottom:6px"><strong>直连模式</strong>（不经代理）：</p>
+      <div class="code-block">
+<span class="kw">GET</span> <span class="str">/index.html</span> HTTP/1.1<br>
+<span class="kw">Host</span>: example.com<br>
+<span class="kw">User-Agent</span>: Mozilla/5.0
+      </div>
+    </div>
+    <div>
+      <p style="color:var(--text2);margin-bottom:6px"><strong>经过 HTTP 代理</strong>：</p>
+      <div class="code-block">
+<span class="kw">GET</span> <span class="str">http://example.com/index.html</span> HTTP/1.1<br>
+<span class="kw">Host</span>: example.com<br>
+<span class="kw">User-Agent</span>: Mozilla/5.0<br>
+<span class="cmt">↑ 注意：URL 是完整的绝对地址</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 为什么要发完整 URL？</h4>
+    <p>因为客户端只和代理建立了一个 TCP 连接。代理需要知道该把请求转发给<strong>哪个目标服务器</strong>，所以必须在请求行里写完整 URL。这和直连时"我已经连到 example.com 了，请求行只写路径就够了"不同。</p>
+  </div>
+
+  <div class="sub-head">✨ HTTP 代理能做什么</div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>📦 缓存</h4>
+      <p>代理可以把 <code>GET /logo.png</code> 的响应缓存起来，下次别人请求同样的资源直接从缓存返回。早期公司、ISP、学校大量部署这种代理降低带宽。</p>
+    </div>
+    <div class="card">
+      <h4>🎯 内容过滤</h4>
+      <p>看到请求 <code>Host: bad-site.com</code>，代理可以直接拒绝。公司防火墙常用。</p>
+    </div>
+    <div class="card">
+      <h4>✏️ 请求改写</h4>
+      <p>可以修改 User-Agent、注入 Header、压缩响应。调试工具（Fiddler、Charles、mitmproxy）就是这类。</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 4 ==================== -->
+<section class="section" id="s4">
+  <div class="section-head">
+    <div class="section-num">4</div>
+    <h2>HTTPS 代理 / CONNECT 方法</h2>
+  </div>
+
+  <p>上一节讲的是代理 <strong>HTTP 明文</strong>请求。但今天 95% 的网站都是 HTTPS —— 代理还能"读懂"内容吗？</p>
+
+  <p><strong>答案：不能</strong>。因为 HTTPS 是端到端加密的。这时候 HTTP 代理必须切换到另一种模式：<strong>CONNECT 方法</strong>，也叫 <strong>HTTP 隧道</strong>。</p>
+
+  <div class="sub-head">🚇 CONNECT：把 HTTP 代理变成"哑管道"</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 340" width="100%">
+      <defs>
+        <marker id="cArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#58a6ff"/>
+        </marker>
+        <marker id="cArrG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#3fb950"/>
+        </marker>
+        <marker id="cArrP" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#bc8cff"/>
+        </marker>
+      </defs>
+
+      <line x1="100" y1="50" x2="100" y2="310" stroke="#30363d" stroke-dasharray="4,3"/>
+      <line x1="400" y1="50" x2="400" y2="310" stroke="#30363d" stroke-dasharray="4,3"/>
+      <line x1="700" y1="50" x2="700" y2="310" stroke="#30363d" stroke-dasharray="4,3"/>
+
+      <rect x="50" y="25" width="100" height="28" rx="5" fill="#1f6feb"/>
+      <text x="100" y="44" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">浏览器</text>
+
+      <rect x="350" y="25" width="100" height="28" rx="5" fill="#d29922"/>
+      <text x="400" y="44" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">HTTP 代理</text>
+
+      <rect x="650" y="25" width="100" height="28" rx="5" fill="#2a6e3a"/>
+      <text x="700" y="44" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">目标 HTTPS 站</text>
+
+      <!-- Step 1: CONNECT 请求 -->
+      <line x1="100" y1="85" x2="400" y2="85" stroke="#58a6ff" stroke-width="2" marker-end="url(#cArr)"/>
+      <text x="250" y="78" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">① CONNECT example.com:443 HTTP/1.1</text>
+      <text x="250" y="98" text-anchor="middle" fill="#8b949e" font-size="9">请代理帮我打开一条到 example.com:443 的 TCP 隧道</text>
+
+      <!-- Step 2: 代理建立到目标的 TCP -->
+      <line x1="400" y1="118" x2="700" y2="118" stroke="#58a6ff" stroke-width="2" marker-end="url(#cArr)"/>
+      <text x="550" y="111" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">② TCP SYN → :443</text>
+      <line x1="700" y1="135" x2="400" y2="135" stroke="#3fb950" stroke-width="2" marker-end="url(#cArrG)"/>
+      <text x="550" y="150" text-anchor="middle" fill="#3fb950" font-size="10">TCP 连接建立</text>
+
+      <!-- Step 3: 200 OK -->
+      <line x1="400" y1="170" x2="100" y2="170" stroke="#3fb950" stroke-width="2" marker-end="url(#cArrG)"/>
+      <text x="250" y="163" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">③ HTTP/1.1 200 Connection Established</text>
+      <text x="250" y="182" text-anchor="middle" fill="#8b949e" font-size="9">隧道就绪，后续数据原样转发</text>
+
+      <!-- Step 4: TLS 握手直接透传 -->
+      <rect x="50" y="205" width="700" height="70" rx="8" fill="rgba(188,140,255,0.08)" stroke="#bc8cff" stroke-dasharray="4,3"/>
+      <text x="400" y="225" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">④ 客户端 ↔ 目标 进行 TLS 握手（代理完全不参与）</text>
+      <line x1="100" y1="245" x2="700" y2="245" stroke="#bc8cff" stroke-width="2" marker-end="url(#cArrP)"/>
+      <text x="400" y="240" text-anchor="middle" fill="#bc8cff" font-size="10">TLS ClientHello → → →</text>
+      <line x1="700" y1="265" x2="100" y2="265" stroke="#bc8cff" stroke-width="2" marker-end="url(#cArrP)"/>
+      <text x="400" y="260" text-anchor="middle" fill="#bc8cff" font-size="10">← ← ← ServerHello + Certificate</text>
+
+      <text x="400" y="295" text-anchor="middle" fill="#d29922" font-size="11" font-weight="700">⑤ 代理只看到加密的二进制流，不理解内容</text>
+      <text x="400" y="310" text-anchor="middle" fill="#8b949e" font-size="10">此时 HTTP 代理的行为几乎和 SOCKS5 一样"哑"</text>
+    </svg>
+    <div class="diagram-caption">CONNECT 方法本质上是把 HTTP 代理"降格"成了一个普通 TCP 隧道</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 有意思的观察</h4>
+    <p>当 HTTP 代理处理 HTTPS 请求时（通过 CONNECT），它的行为和 SOCKS5 非常相似 —— 只负责转发字节，不理解内容。那为什么还有 SOCKS5？因为：</p>
+    <ul style="margin-left:20px;margin-top:6px;color:var(--text2)">
+      <li>HTTP 代理只能转发 TCP，<strong>不支持 UDP</strong></li>
+      <li>HTTP 代理依赖 CONNECT 时只能代理"出去"的连接，不适合其他场景</li>
+      <li>SOCKS5 协议更轻量、更通用</li>
+    </ul>
+  </div>
+
+  <div class="warn-box">
+    <h4>⚠️ 小心术语歧义："HTTPS 代理"</h4>
+    <p>"HTTPS 代理"这个词有两层含义，经常引起混淆：<br>
+    <strong>① 代理 HTTPS 流量</strong>（最常见）：就是本节讲的 CONNECT 隧道机制，代理本身接收明文 HTTP 请求。<br>
+    <strong>② 代理与客户端之间用 HTTPS 加密</strong>（较少见）：客户端到代理这段用 TLS 保护，防止本地网络窥探代理用户名密码等。配置时写 <code>https://proxy.example.com:443</code>。</p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 5 ==================== -->
+<section class="section" id="s5">
+  <div class="section-head">
+    <div class="section-num">5</div>
+    <h2>SOCKS5 的工作原理</h2>
+  </div>
+
+  <p>SOCKS5（RFC 1928）是 SOCKS 协议的第 5 版，现在最常用。它的设计目标是做<strong>"尽可能通用的代理"</strong>——不关心应用层协议，什么都能转发。</p>
+
+  <div class="sub-head">🧱 SOCKS5 的工作分两个阶段</div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 360" width="100%">
+      <defs>
+        <marker id="sArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#58a6ff"/>
+        </marker>
+        <marker id="sArrG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#3fb950"/>
+        </marker>
+      </defs>
+
+      <line x1="120" y1="50" x2="120" y2="330" stroke="#30363d" stroke-dasharray="4,3"/>
+      <line x1="600" y1="50" x2="600" y2="330" stroke="#30363d" stroke-dasharray="4,3"/>
+
+      <rect x="60" y="25" width="120" height="28" rx="5" fill="#1f6feb"/>
+      <text x="120" y="44" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">客户端</text>
+
+      <rect x="540" y="25" width="120" height="28" rx="5" fill="#58a6ff"/>
+      <text x="600" y="44" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">SOCKS5 代理</text>
+
+      <!-- 阶段 1: 协商 -->
+      <rect x="30" y="65" width="740" height="110" rx="8" fill="rgba(88,166,255,0.06)" stroke="#58a6ff" stroke-dasharray="4,3"/>
+      <text x="400" y="82" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="700">阶段 1：认证方法协商</text>
+
+      <line x1="120" y1="100" x2="600" y2="100" stroke="#58a6ff" stroke-width="2" marker-end="url(#sArr)"/>
+      <text x="360" y="96" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700">① 我想用 SOCKS5</text>
+      <text x="360" y="112" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">[0x05][01][0x00]  ← 版本5 / 1种方法 / 无认证</text>
+
+      <line x1="600" y1="145" x2="120" y2="145" stroke="#3fb950" stroke-width="2" marker-end="url(#sArrG)"/>
+      <text x="360" y="141" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">② OK，就用这个方法</text>
+      <text x="360" y="157" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">[0x05][0x00]  ← 版本5 / 确认无认证</text>
+
+      <!-- 阶段 2: 请求 -->
+      <rect x="30" y="190" width="740" height="105" rx="8" fill="rgba(188,140,255,0.06)" stroke="#bc8cff" stroke-dasharray="4,3"/>
+      <text x="400" y="207" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">阶段 2：连接请求</text>
+
+      <line x1="120" y1="230" x2="600" y2="230" stroke="#bc8cff" stroke-width="2" marker-end="url(#sArr)"/>
+      <text x="360" y="224" text-anchor="middle" fill="#bc8cff" font-size="11" font-weight="700">③ 帮我连 example.com:443</text>
+      <text x="360" y="244" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">[VER][CMD][RSV][ATYP][DST.ADDR][DST.PORT]</text>
+
+      <line x1="600" y1="275" x2="120" y2="275" stroke="#3fb950" stroke-width="2" marker-end="url(#sArrG)"/>
+      <text x="360" y="269" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700">④ 成功，隧道建立</text>
+      <text x="360" y="289" text-anchor="middle" fill="#8b949e" font-size="10" font-family="monospace">[VER][REP=00][RSV][BND.ADDR][BND.PORT]</text>
+
+      <!-- 阶段 3: 透传 -->
+      <text x="400" y="322" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">⑤ 后续：双向字节流直接透传，代理完全不解析内容</text>
+    </svg>
+    <div class="diagram-caption">SOCKS5 先协商认证方式，再协商连接目标，之后就只是个哑水管</div>
+  </div>
+
+  <div class="sub-head">🔬 SOCKS5 请求包的字节结构</div>
+
+  <p>以"连接 example.com:443"为例：</p>
+
+  <div class="card">
+    <div class="bytes">
+      <div class="byte b1">0x05<small>VER</small></div>
+      <div class="byte b2">0x01<small>CMD<br>CONNECT</small></div>
+      <div class="byte b3">0x00<small>RSV<br>保留</small></div>
+      <div class="byte b4">0x03<small>ATYP<br>域名</small></div>
+      <div class="byte b1">0x0B<small>地址长度<br>11字节</small></div>
+      <div class="byte b3" style="min-width:160px">example.com<small>DST.ADDR (ASCII)</small></div>
+      <div class="byte b2">01 BB<small>DST.PORT<br>= 443</small></div>
+    </div>
+    <ul>
+      <li><strong style="color:var(--socks)">VER</strong>：协议版本 = <code>0x05</code></li>
+      <li><strong style="color:var(--http)">CMD</strong>：命令。<code>01</code> = CONNECT（TCP 连接），<code>02</code> = BIND（反向连接），<code>03</code> = UDP ASSOCIATE（UDP 转发）</li>
+      <li><strong style="color:var(--green)">ATYP</strong>：地址类型。<code>01</code> = IPv4，<code>03</code> = 域名，<code>04</code> = IPv6</li>
+      <li><strong style="color:var(--green)">DST.ADDR</strong>：目标地址。域名或 IP</li>
+      <li><strong style="color:var(--http)">DST.PORT</strong>：端口号（大端序，2 字节）</li>
+    </ul>
+  </div>
+
+  <div class="sub-head">🚀 SOCKS5 的三种命令</div>
+
+  <div class="grid-3">
+    <div class="card socks">
+      <h4>CONNECT (0x01)</h4>
+      <p>最常用。让代理帮你建立到目标的 TCP 连接。</p>
+      <p style="margin-top:8px"><strong>用途</strong>：几乎所有代理场景</p>
+    </div>
+    <div class="card socks">
+      <h4>BIND (0x02)</h4>
+      <p>让代理监听一个端口，等待外部连接进来。主要用于主动模式 FTP 等需要"反向连接"的协议。</p>
+      <p style="margin-top:8px"><strong>用途</strong>：已经很少见</p>
+    </div>
+    <div class="card socks">
+      <h4>UDP ASSOCIATE (0x03)</h4>
+      <p>让代理帮忙转发 UDP 数据包。这是 SOCKS5 相对于 HTTP 代理的核心优势。</p>
+      <p style="margin-top:8px"><strong>用途</strong>：DNS、游戏、视频通话、QUIC</p>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 UDP ASSOCIATE 的特殊之处</h4>
+    <p>SOCKS5 协商本身是 TCP，但它可以"派生"出一条 UDP 通道：客户端发 <code>UDP ASSOCIATE</code> 命令，代理会告诉客户端"你把 UDP 数据发到我的 X 端口，我帮你转出去"。TCP 那条控制通道保持着，<strong>掉线就撤销 UDP 转发</strong>。这是 HTTP 代理根本做不到的事。</p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 6 ==================== -->
+<section class="section" id="s6">
+  <div class="section-head">
+    <div class="section-num">6</div>
+    <h2>握手流程并排对比</h2>
+  </div>
+
+  <p>通过动画直观感受两种代理建立连接的差异：</p>
+
+  <div class="tabs">
+    <button class="tab socks-tab active" onclick="switchTab('socks')">🧦 SOCKS5 握手</button>
+    <button class="tab http-tab" onclick="switchTab('http')">🌐 HTTP CONNECT 握手</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary" onclick="playHandshake()">▶ 播放动画</button>
+    <button class="btn" onclick="resetHandshake()">↺ 重置</button>
+  </div>
+
+  <!-- SOCKS5 tab -->
+  <div class="tab-content active" id="tab-socks">
+    <div class="handshake-stage">
+      <div class="hs-step client" data-n="1">
+        <div class="hs-num">1</div>
+        <div class="hs-text"><strong>客户端 → 代理</strong>：<code>[0x05, 0x01, 0x00]</code> 表示"我是 SOCKS5，我支持 1 种方法：无需认证"</div>
+      </div>
+      <div class="hs-step server" data-n="2">
+        <div class="hs-num">2</div>
+        <div class="hs-text"><strong>代理 → 客户端</strong>：<code>[0x05, 0x00]</code> 表示"同意，不认证"。如需密码会在这里协商用户名密码。</div>
+      </div>
+      <div class="hs-step client" data-n="3">
+        <div class="hs-num">3</div>
+        <div class="hs-text"><strong>客户端 → 代理</strong>：发送请求报文 <code>[VER=5][CMD=CONNECT][RSV][ATYP=域名][长度=11][example.com][端口=443]</code></div>
+      </div>
+      <div class="hs-step server" data-n="4">
+        <div class="hs-num">4</div>
+        <div class="hs-text"><strong>代理行动</strong>：代理向 <code>example.com:443</code> 发起 TCP 连接。</div>
+      </div>
+      <div class="hs-step server" data-n="5">
+        <div class="hs-num">5</div>
+        <div class="hs-text"><strong>代理 → 客户端</strong>：<code>[VER=5][REP=0x00(成功)][RSV][ATYP][绑定IP][绑定端口]</code> —— 隧道就绪</div>
+      </div>
+      <div class="hs-step client" data-n="6">
+        <div class="hs-num">6</div>
+        <div class="hs-text"><strong>数据透传阶段</strong>：之后的字节双向原样转发，代理不再解析。如果是 HTTPS 流量，现在开始做 TLS 握手。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HTTP tab -->
+  <div class="tab-content" id="tab-http">
+    <div class="handshake-stage">
+      <div class="hs-step client" data-n="1">
+        <div class="hs-num">1</div>
+        <div class="hs-text"><strong>客户端 → 代理</strong>：<code>CONNECT example.com:443 HTTP/1.1</code><br>（还包括 <code>Host:</code>、<code>Proxy-Authorization:</code> 等头部）</div>
+      </div>
+      <div class="hs-step client" data-n="2">
+        <div class="hs-num">2</div>
+        <div class="hs-text"><strong>代理解析</strong>：代理读取请求行，看到目标是 <code>example.com:443</code>。如需认证就在此验证 <code>Proxy-Authorization</code> 头（常见 <code>Basic</code> 或 <code>Digest</code>）。</div>
+      </div>
+      <div class="hs-step server" data-n="3">
+        <div class="hs-num">3</div>
+        <div class="hs-text"><strong>代理行动</strong>：代理向 <code>example.com:443</code> 发起 TCP 连接。</div>
+      </div>
+      <div class="hs-step server" data-n="4">
+        <div class="hs-num">4</div>
+        <div class="hs-text"><strong>代理 → 客户端</strong>：<code>HTTP/1.1 200 Connection Established</code> —— 隧道就绪</div>
+      </div>
+      <div class="hs-step client" data-n="5">
+        <div class="hs-num">5</div>
+        <div class="hs-text"><strong>数据透传阶段</strong>：之后就和 SOCKS5 的最后阶段一样——双向字节流透传，代理不再解析。</div>
+      </div>
+      <div class="hs-step client" data-n="6">
+        <div class="hs-num">6</div>
+        <div class="hs-text"><strong>对比</strong>：HTTP CONNECT 握手<strong>更简单</strong>（一次请求一次响应），但基于文本（ASCII），<strong>比 SOCKS5 的二进制协议包大</strong>且必须解析字符串。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 对比总结</h4>
+    <p>两者的建立隧道的<strong>最终状态是一样的</strong>——都变成一个透明的 TCP 管道。但：</p>
+    <ul style="margin-left:20px;margin-top:6px;color:var(--text2)">
+      <li>SOCKS5 用<strong>二进制协议</strong>，更紧凑、更高效</li>
+      <li>HTTP CONNECT 用<strong>文本协议</strong>，人类可读、可和其他 HTTP 工具协同</li>
+      <li>SOCKS5 的握手是<strong>两轮</strong>（认证 + 请求），HTTP 是<strong>一轮</strong></li>
+      <li>HTTP 代理天然可以对<strong>明文 HTTP</strong> 做 L7 操作（缓存/改写），SOCKS5 没法做</li>
+    </ul>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 7 ==================== -->
+<section class="section" id="s7">
+  <div class="section-head">
+    <div class="section-num">7</div>
+    <h2>能力矩阵对比</h2>
+  </div>
+
+  <p>最直观的方式——把所有差异列成一张表：</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>维度</th>
+          <th style="color:var(--socks)">🧦 SOCKS5</th>
+          <th style="color:var(--http)">🌐 HTTP/HTTPS 代理</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>OSI 层级</strong></td>
+          <td>会话层 (L5)</td>
+          <td>应用层 (L7)</td>
+        </tr>
+        <tr>
+          <td><strong>协议类型</strong></td>
+          <td>二进制协议</td>
+          <td>文本协议（基于 HTTP）</td>
+        </tr>
+        <tr>
+          <td><strong>支持 TCP</strong></td>
+          <td><span class="tag tag-green">✓ CONNECT 命令</span></td>
+          <td><span class="tag tag-green">✓ 直接代理 / CONNECT</span></td>
+        </tr>
+        <tr>
+          <td><strong>支持 UDP</strong></td>
+          <td><span class="tag tag-green">✓ UDP ASSOCIATE</span></td>
+          <td><span class="tag tag-red">✗ 不支持</span></td>
+        </tr>
+        <tr>
+          <td><strong>协议无关性</strong></td>
+          <td><span class="tag tag-green">✓ 任何 TCP/UDP 应用都能用</span></td>
+          <td><span class="tag tag-red">✗ 只处理 HTTP 系</span></td>
+        </tr>
+        <tr>
+          <td><strong>理解应用数据</strong></td>
+          <td>完全不理解</td>
+          <td>理解 HTTP（明文时）</td>
+        </tr>
+        <tr>
+          <td><strong>可做缓存</strong></td>
+          <td><span class="tag tag-red">✗</span></td>
+          <td><span class="tag tag-green">✓（只对明文 HTTP）</span></td>
+        </tr>
+        <tr>
+          <td><strong>可做内容过滤</strong></td>
+          <td>只能按 IP/域名过滤</td>
+          <td>可按 URL / Header / 内容过滤</td>
+        </tr>
+        <tr>
+          <td><strong>可改写请求</strong></td>
+          <td><span class="tag tag-red">✗</span></td>
+          <td><span class="tag tag-green">✓ 对明文 HTTP 可任意改写</span></td>
+        </tr>
+        <tr>
+          <td><strong>DNS 解析位置</strong></td>
+          <td>可选客户端 / 服务端</td>
+          <td>客户端（通常）</td>
+        </tr>
+        <tr>
+          <td><strong>认证方式</strong></td>
+          <td>无 / 用户名密码 / GSSAPI</td>
+          <td>Basic / Digest / NTLM（通过 <code>Proxy-Authorization</code>）</td>
+        </tr>
+        <tr>
+          <td><strong>协议开销</strong></td>
+          <td>小（几十字节握手）</td>
+          <td>较大（文本头）</td>
+        </tr>
+        <tr>
+          <td><strong>浏览器原生支持</strong></td>
+          <td><span class="tag tag-green">✓ 大部分浏览器支持</span></td>
+          <td><span class="tag tag-green">✓ 所有浏览器原生支持</span></td>
+        </tr>
+        <tr>
+          <td><strong>系统级支持</strong></td>
+          <td>系统代理设置常见</td>
+          <td>系统代理设置最常见</td>
+        </tr>
+        <tr>
+          <td><strong>典型应用</strong></td>
+          <td>SSH 隧道、代理客户端（Shadowsocks/V2Ray 本地端）、游戏、邮件</td>
+          <td>企业防火墙、缓存代理、Web 调试工具（Charles/Fiddler）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn-box">
+    <h4>⚠️ 一个常见误解</h4>
+    <p>"SOCKS5 比 HTTP 代理更安全"—— <strong>不准确</strong>。两者本身都<strong>不加密流量</strong>。协议本身都不对转发的数据做加密。所谓"安全"取决于你传的是什么：<br>
+    • 传 HTTPS？无论走哪种代理，TLS 都保护了内容。<br>
+    • 传 HTTP？无论走哪种代理，代理或经过的路径都可以看到明文。<br>
+    SOCKS5 仅在"不泄露路径信息"上稍有优势（见下节 DNS 部分）。</p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 8 ==================== -->
+<section class="section" id="s8">
+  <div class="section-head">
+    <div class="section-num">8</div>
+    <h2>DNS 行为差异（重要）</h2>
+  </div>
+
+  <p>这是两种代理最容易被忽略、但后果最严重的差异之一。</p>
+
+  <div class="sub-head">🌍 问题：DNS 解析发生在哪里？</div>
+
+  <p>当你要访问 <code>example.com</code>，总得先解析出它的 IP。这一步在哪台机器上完成，决定了：</p>
+  <ul style="margin-left:22px;color:var(--text2);margin-bottom:14px">
+    <li>你的本地 ISP 能不能看到你在访问什么网站</li>
+    <li>你能不能绕过本地的 DNS 污染</li>
+    <li>代理服务器能不能看到你的目标域名</li>
+  </ul>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 380" width="100%">
+      <!-- HTTP 代理场景 -->
+      <rect x="20" y="30" width="760" height="160" rx="10" fill="rgba(210,153,34,0.05)" stroke="#d29922" stroke-dasharray="4,3"/>
+      <text x="400" y="52" text-anchor="middle" fill="#d29922" font-size="13" font-weight="700">HTTP 代理：DNS 在客户端解析 —— 本地 DNS 会看到所有域名</text>
+
+      <rect x="40" y="75" width="120" height="50" rx="6" fill="#161b22" stroke="#58a6ff"/>
+      <text x="100" y="100" text-anchor="middle" fill="#e6edf3" font-size="12">客户端</text>
+      <text x="100" y="115" text-anchor="middle" fill="#8b949e" font-size="9">①解析域名</text>
+
+      <rect x="225" y="75" width="120" height="50" rx="6" fill="#161b22" stroke="#f85149"/>
+      <text x="285" y="100" text-anchor="middle" fill="#f85149" font-size="12">本地 DNS</text>
+      <text x="285" y="115" text-anchor="middle" fill="#8b949e" font-size="9">⚠ 能看到域名</text>
+
+      <rect x="410" y="75" width="120" height="50" rx="6" fill="#161b22" stroke="#d29922"/>
+      <text x="470" y="100" text-anchor="middle" fill="#d29922" font-size="12">HTTP 代理</text>
+
+      <rect x="610" y="75" width="130" height="50" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="675" y="100" text-anchor="middle" fill="#e6edf3" font-size="12">目标网站</text>
+
+      <line x1="160" y1="100" x2="225" y2="100" stroke="#58a6ff" stroke-width="2"/>
+      <line x1="345" y1="100" x2="410" y2="100" stroke="#58a6ff" stroke-width="2"/>
+      <line x1="530" y1="100" x2="610" y2="100" stroke="#58a6ff" stroke-width="2"/>
+
+      <text x="400" y="150" text-anchor="middle" fill="#d29922" font-size="11">过程：客户端先问本地 DNS "example.com 的 IP 是啥？"→ 得到 IP → 让代理连这个 IP</text>
+      <text x="400" y="170" text-anchor="middle" fill="#8b949e" font-size="10">⚠ 本地 DNS 记录了你访问过 example.com；可能受 DNS 污染</text>
+
+      <!-- SOCKS5 场景 -->
+      <rect x="20" y="210" width="760" height="160" rx="10" fill="rgba(88,166,255,0.05)" stroke="#58a6ff" stroke-dasharray="4,3"/>
+      <text x="400" y="232" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">SOCKS5：可以把域名传给代理，由代理远程解析</text>
+
+      <rect x="40" y="255" width="120" height="50" rx="6" fill="#161b22" stroke="#58a6ff"/>
+      <text x="100" y="280" text-anchor="middle" fill="#e6edf3" font-size="12">客户端</text>
+      <text x="100" y="295" text-anchor="middle" fill="#8b949e" font-size="9">域名直接传代理</text>
+
+      <rect x="225" y="255" width="120" height="50" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="285" y="280" text-anchor="middle" fill="#3fb950" font-size="12">本地 DNS</text>
+      <text x="285" y="295" text-anchor="middle" fill="#8b949e" font-size="9">✓ 不经过</text>
+
+      <rect x="410" y="255" width="120" height="50" rx="6" fill="#161b22" stroke="#58a6ff"/>
+      <text x="470" y="280" text-anchor="middle" fill="#58a6ff" font-size="12">SOCKS5 代理</text>
+      <text x="470" y="295" text-anchor="middle" fill="#8b949e" font-size="9">在远端解析</text>
+
+      <rect x="610" y="255" width="130" height="50" rx="6" fill="#161b22" stroke="#3fb950"/>
+      <text x="675" y="280" text-anchor="middle" fill="#e6edf3" font-size="12">目标网站</text>
+
+      <line x1="160" y1="280" x2="410" y2="280" stroke="#58a6ff" stroke-width="2" stroke-dasharray="8,4"/>
+      <line x1="530" y1="280" x2="610" y2="280" stroke="#58a6ff" stroke-width="2"/>
+
+      <text x="400" y="330" text-anchor="middle" fill="#58a6ff" font-size="11">SOCKS5 协议支持 ATYP=0x03 域名类型，客户端可以直接把"example.com"传给代理</text>
+      <text x="400" y="350" text-anchor="middle" fill="#8b949e" font-size="10">✓ 本地 DNS 看不到目标域名；✓ 绕过 DNS 污染</text>
+    </svg>
+    <div class="diagram-caption">SOCKS5 的 <code>ATYP=0x03</code> 让"域名"成为一等公民——这是 HTTP 代理做不到的</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>💡 curl 的小例子：两种行为</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">
+      <div>
+        <p style="color:var(--text2);margin-bottom:4px"><strong>本地解析（leak）</strong></p>
+        <div class="code-block" style="font-size:.78rem">
+<span class="cmt"># 客户端先本地解析</span><br>
+<span class="kw">curl</span> --socks5 127.0.0.1:1080 <span class="str">example.com</span>
+        </div>
+      </div>
+      <div>
+        <p style="color:var(--text2);margin-bottom:4px"><strong>远程解析（推荐）</strong></p>
+        <div class="code-block" style="font-size:.78rem">
+<span class="cmt"># 域名发给代理</span><br>
+<span class="kw">curl</span> --socks5-hostname 127.0.0.1:1080 <span class="str">example.com</span>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:10px;font-size:.9rem">同样是 SOCKS5 代理，<code>--socks5</code> 和 <code>--socks5-hostname</code> 的差别就是"本地解析 vs 远程解析"—— 你能控制 DNS 在哪一端发生。</p>
+  </div>
+
+  <div class="warn-box">
+    <h4>⚠️ "DNS 泄漏"的来源</h4>
+    <p>"DNS 泄漏"指的就是：你使用了代理，但 DNS 请求还是走了本地网络——本地 ISP/DNS 看到了你访问的域名。HTTP 代理结构性地<strong>几乎无法避免</strong>这个问题（除非配合特殊的 DNS 解析方案）。SOCKS5 原生解决了这个问题。</p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 9 ==================== -->
+<section class="section" id="s9">
+  <div class="section-head">
+    <div class="section-num">9</div>
+    <h2>性能、安全与使用场景</h2>
+  </div>
+
+  <div class="sub-head">⚡ 性能</div>
+
+  <div class="grid-2">
+    <div class="card socks">
+      <h4>🧦 SOCKS5 更轻量</h4>
+      <ul>
+        <li>握手开销：~10 字节（二进制）</li>
+        <li>无额外解析、无协议转换</li>
+        <li>转发阶段几乎就是 <code>memcpy</code></li>
+      </ul>
+    </div>
+    <div class="card http">
+      <h4>🌐 HTTP 代理开销略大</h4>
+      <ul>
+        <li>握手开销：~200-500 字节（文本头）</li>
+        <li>需要按行解析 HTTP 报文</li>
+        <li>HTTP/1.1 Keep-Alive 可复用</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="color:var(--text2);font-size:.9rem">实际使用中差异通常不明显——真正的瓶颈在网络延迟和带宽，不在代理协议本身。</p>
+
+  <div class="sub-head">🔒 安全</div>
+
+  <div class="card">
+    <h4>核心事实：两者协议本身都不加密</h4>
+    <p>SOCKS5 和 HTTP 代理都只是"搬运工协议"，协议本身不提供加密。<strong>加密来自被代理的上层协议</strong>：</p>
+    <ul>
+      <li>你访问 HTTPS 网站：TLS 提供加密，代理看不到内容</li>
+      <li>你访问 HTTP 网站：代理能看到全部内容</li>
+      <li>客户端到代理这段（承载代理协议本身）如果是明文，<strong>本地 ISP 就能看到你在用代理 + 看到 SOCKS5 认证中的用户名</strong></li>
+    </ul>
+    <p style="margin-top:8px">所以真实使用中，人们会在代理协议外面再套一层加密：</p>
+    <ul>
+      <li><strong>SSH 隧道承载 SOCKS5</strong>：<code>ssh -D 1080 user@server</code></li>
+      <li><strong>Shadowsocks/V2Ray</strong>：自己实现加密 + 在本地暴露 SOCKS5/HTTP 接口给应用</li>
+      <li><strong>HTTPS 代理</strong>：客户端到代理这段用 TLS 保护</li>
+    </ul>
+  </div>
+
+  <div class="sub-head">🎯 典型使用场景</div>
+
+  <div class="grid-2">
+    <div>
+      <div class="card socks">
+        <h4>SOCKS5 的典型场景</h4>
+        <ul>
+          <li><strong>通用应用代理</strong>：邮件客户端、数据库连接、SSH、游戏</li>
+          <li><strong>SSH 动态端口转发</strong>：<code>ssh -D</code> 一行命令启动 SOCKS5 服务</li>
+          <li><strong>Shadowsocks/V2Ray 本地端</strong>：这些工具在本地暴露 SOCKS5，应用连接本地 SOCKS5 即可</li>
+          <li><strong>需要 UDP 的应用</strong>：DNS over SOCKS5、游戏、视频会议</li>
+          <li><strong>避免 DNS 泄漏</strong>：使用远程解析模式</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="card http">
+        <h4>HTTP 代理的典型场景</h4>
+        <ul>
+          <li><strong>企业上网代理</strong>：公司网关、学校上网 —— 要做内容审计和过滤</li>
+          <li><strong>Web 调试工具</strong>：Charles、Fiddler、mitmproxy —— 需要看 HTTP 内容</li>
+          <li><strong>缓存代理</strong>：Squid 等，加速 Web 访问，节省带宽</li>
+          <li><strong>爬虫/自动化</strong>：按 URL 路由不同代理池</li>
+          <li><strong>反向代理</strong>：Nginx 面向 Web 服务（注意：反向代理 ≠ 我们说的"代理"，是服务端组件）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🎓 经验法则</h4>
+    <p>
+    • 你想代理"<strong>所有流量</strong>"→ 选 SOCKS5<br>
+    • 你只代理"<strong>Web 浏览</strong>"→ HTTP 代理够用<br>
+    • 你要代理"<strong>游戏/视频通话/DNS</strong>"→ 必须 SOCKS5<br>
+    • 你要"<strong>看/改 HTTP 请求内容</strong>"→ 必须 HTTP 代理<br>
+    • 你要"<strong>一个代理通吃</strong>" → 同时支持 SOCKS5 和 HTTP 的代理软件（大部分现代工具都如此）
+    </p>
+  </div>
+</section>
+
+
+<!-- ==================== SECTION 10 ==================== -->
+<section class="section" id="s10">
+  <div class="section-head">
+    <div class="section-num">10</div>
+    <h2>常见疑问 & 测验</h2>
+  </div>
+
+  <div class="sub-head">❓ Q&amp;A</div>
+
+  <div class="card">
+    <h4>Q1：浏览器填写代理时，选 SOCKS5 还是 HTTP？</h4>
+    <p>两者都能让浏览器走代理。一般情况下没区别。如果代理是 Shadowsocks/V2Ray 这类工具在本地暴露的接口，两者都可以选；但选 SOCKS5 通常能避免 DNS 泄漏（前提是浏览器也设置"用代理解析 DNS"）。Firefox 的设置里直接有这个选项叫 <code>Proxy DNS when using SOCKS v5</code>。</p>
+  </div>
+
+  <div class="card">
+    <h4>Q2：为什么有时候看到代理端口是 1080？有时候是 8080？</h4>
+    <p>只是约定，不强制。<code>1080</code> 历史上是 SOCKS 的常用端口（源自 SOCKS 协议的最早实现），<code>8080</code>/<code>3128</code> 是 HTTP 代理的常用端口（<code>3128</code> 是 Squid 默认）。实际可以配置成任意端口。</p>
+  </div>
+
+  <div class="card">
+    <h4>Q3：HTTPS 代理能"中间人解密"我的流量吗？</h4>
+    <p>默认<strong>不能</strong>——它只是用 CONNECT 建立了一个 TCP 隧道，TLS 是客户端和目标服务器直接握手的。但如果是企业环境，IT 给你的电脑<strong>安装了根证书</strong>，那么企业代理可以伪造证书做 MITM 解密——这就是调试工具（Charles/mitmproxy）的工作原理。<strong>看到浏览器没报证书错误 ≠ 没被解密</strong>，关键在于信任的根证书列表。</p>
+  </div>
+
+  <div class="card">
+    <h4>Q4：SOCKS4 和 SOCKS5 区别？</h4>
+    <p>SOCKS4 不支持 UDP、不支持 IPv6、不支持强认证、只能用 IP 不能用域名。SOCKS5（1996 年定型）全部解决。今天几乎没有使用 SOCKS4 的理由。还有个 <code>SOCKS4a</code> 补丁版支持域名，但已被 SOCKS5 取代。</p>
+  </div>
+
+  <div class="card">
+    <h4>Q5："透明代理"又是什么？</h4>
+    <p>这是一种<strong>部署方式</strong>，不是新协议。指的是在网络路径上（路由器、网关）强制拦截流量到代理，客户端<strong>完全不知道自己走了代理</strong>。公司网关、运营商的 Web 加速缓存常用。透明代理技术上底层可以是 HTTP 或其他协议，和我们讨论的 SOCKS5/HTTP 代理是不同维度的分类。</p>
+  </div>
+
+  <div class="sub-head">🎯 知识测验</div>
+
+  <div class="quiz" data-correct="B">
+    <h4>1. SOCKS5 相对 HTTP 代理最本质的优势是什么？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 传输速度更快</li>
+      <li data-k="B" onclick="checkQuiz(this,true)">B. 协议无关，支持 TCP 和 UDP 任何应用</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 自带加密</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 握手更复杂</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>B</strong>。SOCKS5 不关心上层协议，TCP/UDP 都能搬；HTTP 代理受限于 HTTP 语义，只能处理基于 HTTP 的流量，且不支持 UDP。速度差异在实际使用中可忽略；两者本身都不加密。</div>
+  </div>
+
+  <div class="quiz" data-correct="C">
+    <h4>2. HTTP 代理在处理 HTTPS 流量时使用什么机制？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. GET 方法 + 绝对 URL</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 自动切换为 SOCKS5</li>
+      <li data-k="C" onclick="checkQuiz(this,true)">C. HTTP CONNECT 方法建立 TCP 隧道，代理不解密内容</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 代理用自己的证书中间人解密后再加密转发</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>C</strong>。HTTPS 的加密是端到端的（客户端 ↔ 目标），代理通过 CONNECT 建立一个透明 TCP 隧道，TLS 握手直接透传。D 选项描述的是"带根证书的中间人代理"（如企业审计代理），需要客户端信任代理的根证书，是特殊情况而非默认行为。</div>
+  </div>
+
+  <div class="quiz" data-correct="D">
+    <h4>3. 下面哪种场景<strong>必须</strong>使用 SOCKS5 而不能用 HTTP 代理？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. 浏览器访问一个 HTTPS 网站</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 下载一个大文件</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 邮件客户端收发 IMAP</li>
+      <li data-k="D" onclick="checkQuiz(this,true)">D. 用 DNS over UDP 查询远程 DNS</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>D</strong>。DNS 使用 UDP，HTTP 代理不支持 UDP。A 和 B 用 HTTP CONNECT 即可；C 是 TCP 协议（IMAP over TLS），HTTP 代理也可以用 CONNECT 搞定（尽管不够优雅）。</div>
+  </div>
+
+  <div class="quiz" data-correct="B">
+    <h4>4. "DNS 泄漏"指的是什么？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. DNS 服务器被黑客入侵</li>
+      <li data-k="B" onclick="checkQuiz(this,true)">B. 代理本该保护隐私，但客户端的 DNS 解析仍然走本地网络，暴露了访问目标</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. DNS 响应被加密</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. DNS 解析失败导致代理不工作</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>B</strong>。使用代理时，如果 DNS 解析仍走本地，本地 ISP 就能看到你访问了哪些域名，哪怕流量本身走代理了。SOCKS5 支持把域名直接传给代理远程解析（ATYP=0x03），HTTP 代理也可以做但需要特殊配合。</div>
+  </div>
+
+  <div class="quiz" data-correct="A">
+    <h4>5. SOCKS5 协议的 CMD=0x03（UDP ASSOCIATE）是怎么工作的？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,true)">A. TCP 控制通道协商好后，派生一条 UDP 通道用于转发数据；TCP 断开则 UDP 撤销</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. 把 UDP 包封装在 TCP 里传输</li>
+      <li data-k="C" onclick="checkQuiz(this,false)">C. 用 UDP 协商，再用 UDP 传数据</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. 和 CONNECT 一样，但目标端口固定是 53</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>A</strong>。SOCKS5 的 UDP 转发机制保留了一条 TCP 控制通道，客户端在 TCP 上发 UDP ASSOCIATE 命令后，代理返回一个用于 UDP 数据收发的 IP:端口。客户端把 UDP 包封上 SOCKS5 UDP 头（包含目标地址）发给代理的这个端口，代理负责转发。TCP 关闭时整个 UDP 关联关系被撤销。</div>
+  </div>
+
+  <div class="quiz" data-correct="C">
+    <h4>6. 两者在协议栈位置上的差异，最核心的后果是什么？</h4>
+    <ul class="quiz-opts">
+      <li data-k="A" onclick="checkQuiz(this,false)">A. SOCKS5 只能在 Linux 上用，HTTP 代理跨平台</li>
+      <li data-k="B" onclick="checkQuiz(this,false)">B. SOCKS5 不能配合 HTTPS 使用</li>
+      <li data-k="C" onclick="checkQuiz(this,true)">C. SOCKS5 不理解应用层语义（通用），HTTP 代理理解 HTTP 语义（可做缓存/改写）</li>
+      <li data-k="D" onclick="checkQuiz(this,false)">D. HTTP 代理的延迟一定比 SOCKS5 低</li>
+    </ul>
+    <div class="quiz-explain">正确答案：<strong>C</strong>。这就是协议分层的核心思想：位置越高越理解上层语义（能做的事更多，但适用范围窄）；位置越低越通用（什么都能搬，但不理解内容）。这一对比是所有其他差异的根源。</div>
+  </div>
+
+  <div class="highlight-box">
+    <h4>🎓 总结</h4>
+    <p>如果你能把握一句话就掌握了本文精髓：<br>
+    <strong style="color:var(--socks)">SOCKS5 是协议无关的通用搬运工（L5），什么 TCP/UDP 都能搬。</strong><br>
+    <strong style="color:var(--http)">HTTP 代理是懂 HTTP 语义的应用层管家（L7），对 Web 场景更强大但范围受限。</strong><br>
+    其他所有差异——UDP 支持、DNS 行为、缓存能力、协议开销——都是这一根源的自然推导。</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<footer>
+  <p>📚 参考：RFC 1928 (SOCKS5) · RFC 1929 (SOCKS5 认证) · RFC 7231 / 9110 (HTTP 语义) · RFC 7230 (HTTP 报文)</p>
+  <p style="margin-top:6px;color:var(--text3)">本文档聚焦协议原理，适用于任何需要理解网络代理工作机制的场景（开发调试、网络运维、安全研究）</p>
+</footer>
+
+<script>
+// Theme toggle
+function toggleTheme(){
+  const html = document.documentElement;
+  const cur = html.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  const icon = document.getElementById('theme-icon');
+  if(next === 'light'){
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  } else {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+}
+
+// Mobile menu
+function toggleMenu(){
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// Sidebar active link
+const navLinks = document.querySelectorAll('.sidebar a');
+const sections = document.querySelectorAll('.section');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => {
+    if(window.scrollY >= s.offsetTop - 120) cur = s.getAttribute('id');
+  });
+  navLinks.forEach(l => {
+    l.classList.remove('active');
+    if(l.getAttribute('href') === '#' + cur) l.classList.add('active');
+  });
+});
+navLinks.forEach(l => {
+  l.addEventListener('click', () => {
+    if(window.innerWidth <= 900) toggleMenu();
+  });
+});
+
+// Tab switcher
+function switchTab(which){
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab.' + which + '-tab').classList.add('active');
+  document.getElementById('tab-' + which).classList.add('active');
+  resetHandshake();
+}
+
+// Handshake animation
+let hsTimer = null;
+function playHandshake(){
+  resetHandshake();
+  const active = document.querySelector('.tab-content.active');
+  const steps = active.querySelectorAll('.hs-step');
+  let i = 0;
+  hsTimer = setInterval(() => {
+    if(i < steps.length){
+      steps[i].classList.add('active');
+      i++;
+    } else {
+      clearInterval(hsTimer);
+    }
+  }, 650);
+}
+function resetHandshake(){
+  if(hsTimer) clearInterval(hsTimer);
+  document.querySelectorAll('.hs-step').forEach(s => s.classList.remove('active'));
+}
+
+// Quiz
+function checkQuiz(li, isCorrect){
+  const quiz = li.closest('.quiz');
+  if(quiz.classList.contains('answered')) return;
+  quiz.classList.add('answered');
+  const opts = quiz.querySelectorAll('.quiz-opts li');
+  opts.forEach(o => { o.style.cursor = 'default'; o.onclick = null; });
+  if(isCorrect){
+    li.classList.add('correct');
+  } else {
+    li.classList.add('wrong');
+    const key = quiz.getAttribute('data-correct');
+    opts.forEach(o => {
+      if(o.getAttribute('data-k') === key) o.classList.add('correct');
+    });
+  }
+  quiz.querySelector('.quiz-explain').classList.add('show');
+}
+</script>
+
+</body>
+</html>
