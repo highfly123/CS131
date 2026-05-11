@@ -380,15 +380,57 @@
   const emojiEl = document.getElementById("emoji");
   const hintEl  = document.getElementById("hint");
 
-  /* ---------------- Speech ---------------- */
-  function speak(text, rate = 0.85) {
+  /* ---------------- Speech (real human voice with fallback) ---------------- */
+  // Strategy:
+  //  1) Free Dictionary API -> real human audio (Wiktionary recordings)
+  //  2) Google Translate TTS -> high-quality female voice
+  //  3) Browser speechSynthesis -> last-resort fallback
+
+  const audioCache = new Map();   // word -> URL (human audio)
+  const noAudioSet = new Set();   // words known to have no human audio
+  let currentAudio = null;
+
+  // Pre-fetch human audio URL for a word (only real words)
+  async function fetchHumanAudio(word) {
+    const key = word.toLowerCase();
+    if (audioCache.has(key)) return audioCache.get(key);
+    if (noAudioSet.has(key))  return null;
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`);
+      if (!res.ok) { noAudioSet.add(key); return null; }
+      const data = await res.json();
+      // Find first phonetic entry with an audio URL (prefer US)
+      let url = null;
+      for (const entry of data) {
+        const phonetics = entry.phonetics || [];
+        const us = phonetics.find(p => p.audio && /us/i.test(p.audio));
+        const any = phonetics.find(p => p.audio);
+        const pick = us || any;
+        if (pick && pick.audio) { url = pick.audio; break; }
+      }
+      if (url && url.startsWith("//")) url = "https:" + url;
+      if (url) { audioCache.set(key, url); return url; }
+      noAudioSet.add(key);
+      return null;
+    } catch (e) {
+      noAudioSet.add(key);
+      return null;
+    }
+  }
+
+  // Google Translate TTS (unofficial but widely used, supports CORS for audio tags)
+  function googleTtsUrl(text) {
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+  }
+
+  // Browser speech synthesis fallback
+  function speakBrowser(text, rate = 0.85) {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-US";
     u.rate = rate;
-    u.pitch = 1.3;
-    // Try to find a child-friendly voice
+    u.pitch = 1.25;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v =>
       /female|girl|kid|samantha|karen|zira|google us english/i.test(v.name) && /en/i.test(v.lang)
@@ -396,9 +438,67 @@
     if (preferred) u.voice = preferred;
     window.speechSynthesis.speak(u);
   }
-  // Preload voices
+
+  function stopCurrentAudio() {
+    if (currentAudio) {
+      try { currentAudio.pause(); } catch (e) {}
+      currentAudio = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }
+
+  // Play an audio URL; returns a Promise that resolves when done or on error.
+  function playUrl(url, rate = 1) {
+    return new Promise((resolve) => {
+      stopCurrentAudio();
+      const a = new Audio(url);
+      a.playbackRate = rate;
+      currentAudio = a;
+      let settled = false;
+      const done = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+      a.onended = () => done(true);
+      a.onerror = () => done(false);
+      // Safety timeout (some URLs hang)
+      setTimeout(() => done(false), 6000);
+      a.play().catch(() => done(false));
+    });
+  }
+
+  // Main speak function. `kind` can be "word" | "letter" | "sentence"
+  async function speak(text, opts = {}) {
+    const { kind = "word", rate = 1 } = opts;
+
+    // Letters: skip dictionary API (only has full words), use Google TTS directly.
+    if (kind === "letter") {
+      const ok = await playUrl(googleTtsUrl(text), rate);
+      if (!ok) speakBrowser(text, 0.8);
+      return;
+    }
+
+    // Words: try real human audio first
+    if (kind === "word") {
+      const human = await fetchHumanAudio(text);
+      if (human) {
+        const ok = await playUrl(human, rate);
+        if (ok) return;
+      }
+    }
+
+    // Sentences or fallback: Google Translate TTS (very natural female voice)
+    const ok = await playUrl(googleTtsUrl(text), rate);
+    if (!ok) speakBrowser(text, kind === "sentence" ? 0.85 : 0.8);
+  }
+
+  // Preload voices for fallback
   if ("speechSynthesis" in window) {
     window.speechSynthesis.onvoiceschanged = () => {};
+  }
+
+  // Pre-warm the human audio cache in the background
+  function preloadAudio() {
+    WORDS.forEach((item, i) => {
+      setTimeout(() => fetchHumanAudio(item.w), i * 120);
+    });
   }
 
   /* ---------------- Render ---------------- */
@@ -408,8 +508,8 @@
     wordEl.innerHTML = [...item.w].map(ch => `<span>${ch}</span>`).join("");
     emojiEl.textContent = item.e;
     hintEl.textContent = item.s;
-    // Auto-read on every new word
-    setTimeout(() => sayWord(), 250);
+    // Auto-read on every new word (small delay for audio fetch)
+    setTimeout(() => sayWord(), 400);
   }
 
   /* ---------------- Actions ---------------- */
@@ -417,30 +517,23 @@
     const item = WORDS[idx];
     wordEl.style.transform = "scale(1.1)";
     setTimeout(() => wordEl.style.transform = "scale(1)", 200);
-    speak(item.w, 0.8);
+    speak(item.w, { kind: "word", rate: 0.9 });
     addStar();
   }
 
-  function spellWord() {
+  async function spellWord() {
     const item = WORDS[idx];
     const letters = [...item.w];
     const spans = wordEl.querySelectorAll("span");
-    let i = 0;
-    // Cancel any ongoing speech queue
-    window.speechSynthesis.cancel();
-    function step() {
-      if (i >= letters.length) {
-        // Finally read the whole word
-        setTimeout(() => speak(item.w, 0.8), 400);
-        return;
-      }
+    stopCurrentAudio();
+    for (let i = 0; i < letters.length; i++) {
       spans[i].classList.add("jump");
-      speak(letters[i], 0.7);
-      setTimeout(() => spans[i].classList.remove("jump"), 500);
-      i++;
-      setTimeout(step, 700);
+      await speak(letters[i], { kind: "letter", rate: 0.9 });
+      spans[i].classList.remove("jump");
+      await new Promise(r => setTimeout(r, 120));
     }
-    step();
+    await new Promise(r => setTimeout(r, 250));
+    await speak(item.w, { kind: "word", rate: 0.9 });
   }
 
   function nextWord() {
@@ -456,7 +549,7 @@
   wordEl.addEventListener("click", (e) => {
     if (e.target.tagName === "SPAN") {
       e.target.classList.add("jump");
-      speak(e.target.textContent, 0.7);
+      speak(e.target.textContent, { kind: "letter", rate: 0.9 });
       setTimeout(() => e.target.classList.remove("jump"), 500);
     } else {
       sayWord();
@@ -466,7 +559,7 @@
   /* Click emoji -> read the example sentence */
   emojiEl.addEventListener("click", () => {
     const item = WORDS[idx];
-    speak(item.s, 0.85);
+    speak(item.s, { kind: "sentence", rate: 0.95 });
     emojiEl.style.transform = "scale(1.3) rotate(15deg)";
     setTimeout(() => emojiEl.style.transform = "", 300);
   });
@@ -550,25 +643,26 @@
       choicesEl.appendChild(b);
     });
 
-    // Read the target
-    setTimeout(() => speak("Find the word... " + target.w, 0.8), 300);
+    // Read the target with real human voice
+    setTimeout(() => speak(target.w, { kind: "word", rate: 0.9 }), 300);
   }
   function pickChoice(btn, value) {
     if (value === quizAnswer) {
       btn.classList.add("correct");
-      speak("Great job! " + quizAnswer, 0.9);
+      speak(quizAnswer, { kind: "word", rate: 0.9 });
       addStar(); addStar(); addStar();
       celebrate("做对啦！🌟");
       setTimeout(buildQuiz, 1400);
     } else {
       btn.classList.add("wrong");
-      speak("Try again!", 0.9);
+      speak("Try again!", { kind: "sentence", rate: 0.95 });
       setTimeout(() => btn.classList.remove("wrong"), 600);
     }
   }
 
   /* ---------------- Init ---------------- */
   render();
+  preloadAudio();
 </script>
 
 </body>
