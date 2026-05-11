@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trojan 协议深度解析 — 原理图解教程</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-green: #3fb950;
+  --accent-orange: #d29922;
+  --accent-red: #f85149;
+  --accent-purple: #bc8cff;
+  --border: #30363d;
+  --shadow: rgba(0,0,0,0.4);
+  --card-radius: 12px;
+  --sidebar-width: 280px;
+}
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-tertiary: #eaeef2;
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --accent: #0969da;
+  --accent-green: #1a7f37;
+  --accent-orange: #9a6700;
+  --accent-red: #cf222e;
+  --accent-purple: #8250df;
+  --border: #d0d7de;
+  --shadow: rgba(0,0,0,0.1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.8;
+  transition: background 0.3s, color 0.3s;
+}
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0;
+  width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px 0;
+  z-index: 100;
+  transition: transform 0.3s;
+}
+.sidebar-header {
+  padding: 10px 20px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.sidebar-header h2 {
+  font-size: 16px;
+  color: var(--accent);
+}
+.sidebar nav a {
+  display: block;
+  padding: 8px 20px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+.sidebar nav a:hover, .sidebar nav a.active {
+  color: var(--accent);
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent);
+}
+/* Main content */
+.main-content {
+  margin-left: var(--sidebar-width);
+  padding: 40px 60px;
+  max-width: 900px;
+}
+/* Theme toggle */
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 200;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.theme-toggle:hover { transform: scale(1.1); }
+/* Hamburger */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 20px; left: 20px;
+  z-index: 200;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 44px; height: 44px;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 22px;
+}
+/* Sections */
+section {
+  margin-bottom: 80px;
+  scroll-margin-top: 40px;
+}
+h1 {
+  font-size: 2.2em;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+h2 {
+  font-size: 1.6em;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+  color: var(--accent);
+}
+h3 {
+  font-size: 1.2em;
+  margin: 20px 0 10px;
+  color: var(--accent-green);
+}
+p { margin-bottom: 16px; }
+/* Cards */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 24px;
+  margin: 20px 0;
+  box-shadow: 0 2px 12px var(--shadow);
+}
+.card.warning {
+  border-left: 4px solid var(--accent-red);
+  background: rgba(248,81,73,0.05);
+}
+.card.info {
+  border-left: 4px solid var(--accent);
+  background: rgba(88,166,255,0.05);
+}
+.card.success {
+  border-left: 4px solid var(--accent-green);
+  background: rgba(63,185,80,0.05);
+}
+.card.analogy {
+  border-left: 4px solid var(--accent-orange);
+  background: rgba(210,153,34,0.05);
+}
+/* SVG containers */
+.diagram {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  margin: 24px 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram svg { max-width: 100%; height: auto; }
+/* Quiz */
+.quiz-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  margin: 16px 0;
+}
+.quiz-item h4 { color: var(--accent-purple); margin-bottom: 12px; }
+.quiz-options label {
+  display: block;
+  padding: 10px 16px;
+  margin: 6px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+.quiz-options label:hover { border-color: var(--accent); }
+.quiz-options input { margin-right: 8px; }
+.quiz-answer {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(63,185,80,0.1);
+  border: 1px solid var(--accent-green);
+}
+.quiz-answer.show { display: block; }
+.quiz-btn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.quiz-btn:hover { opacity: 0.8; }
+/* Table */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 14px;
+}
+.comparison-table th, .comparison-table td {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.comparison-table th {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+.comparison-table tr:hover { background: var(--bg-tertiary); }
+/* TLS animation */
+.tls-steps { position: relative; }
+.tls-step {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 16px 20px;
+  margin: 12px 0;
+  opacity: 0.4;
+  transform: translateX(-10px);
+  transition: all 0.4s;
+  cursor: pointer;
+}
+.tls-step.active {
+  opacity: 1;
+  transform: translateX(0);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(88,166,255,0.2);
+}
+.tls-step .step-num {
+  display: inline-block;
+  width: 28px; height: 28px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 28px;
+  font-size: 13px;
+  font-weight: bold;
+  margin-right: 10px;
+}
+.step-controls {
+  margin: 16px 0;
+  display: flex;
+  gap: 10px;
+}
+.step-controls button {
+  padding: 8px 18px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.step-controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Flowchart decision */
+.decision-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+}
+/* Keyword highlights */
+.keyword {
+  background: rgba(88,166,255,0.15);
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.9em;
+}
+.highlight-red { color: var(--accent-red); font-weight: bold; }
+.highlight-green { color: var(--accent-green); font-weight: bold; }
+/* Responsive */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; padding: 20px; }
+  .hamburger { display: flex; }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.3em; }
+}
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+/* Legal banner */
+.legal-banner {
+  background: linear-gradient(135deg, rgba(248,81,73,0.1), rgba(210,153,34,0.1));
+  border: 2px solid var(--accent-red);
+  border-radius: var(--card-radius);
+  padding: 24px;
+  margin: 30px 0;
+  text-align: center;
+}
+.legal-banner h3 { color: var(--accent-red); font-size: 1.3em; margin-bottom: 10px; }
+/* Proxy section specific */
+.proxy-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+@media (max-width: 700px) {
+  .proxy-compare { grid-template-columns: 1fr; }
+}
+.proxy-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px;
+}
+.proxy-card h4 {
+  color: var(--accent-purple);
+  margin-bottom: 10px;
+  font-size: 1.1em;
+}
+.proxy-card ul {
+  list-style: none;
+  padding: 0;
+}
+.proxy-card li {
+  padding: 4px 0;
+  padding-left: 20px;
+  position: relative;
+}
+.proxy-card li::before {
+  content: "•";
+  position: absolute;
+  left: 4px;
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+<!-- Theme Toggle -->
+<div class="theme-toggle" onclick="toggleTheme()" title="切换主题">🌙</div>
+<!-- Hamburger -->
+<div class="hamburger" onclick="toggleSidebar()">☰</div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2>📚 Trojan 原理教程</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:4px;">基于不良林视频整理</p>
+  </div>
+  <nav>
+    <a href="#section1">1. 为什么需要 Trojan？</a>
+    <a href="#section2">2. HTTPS 是什么？</a>
+    <a href="#section3">3. 对称 vs 非对称加密</a>
+    <a href="#section4">4. 证书与 CA 机构</a>
+    <a href="#section5">5. TLS 握手过程</a>
+    <a href="#section6">6. Trojan 核心原理</a>
+    <a href="#section7">7. 回落防探测机制</a>
+    <a href="#section8">8. SNI 与风险</a>
+    <a href="#section9">9. 配置概念流程</a>
+    <a href="#section10">10. 测验与总结</a>
+    <a href="#section-proxy" style="border-top:1px solid var(--border);margin-top:10px;padding-top:12px;">附录：SOCKS5 vs HTTP 代理</a>
+  </nav>
+</aside>
+
+<!-- Main Content -->
+<div class="main-content">
+
+
+<!-- Header -->
+<h1>🛡️ Trojan 协议深度解析</h1>
+<p style="color:var(--text-secondary);margin-bottom:30px;">原理图解 · 零基础友好 · 基于不良林视频整理</p>
+
+<!-- Legal Warning -->
+<div class="legal-banner">
+  <h3>⚠️ 法律合规声明</h3>
+  <p>本教程仅用于<strong>技术原理学习</strong>，帮助理解网络安全与加密通信的工作方式。</p>
+  <p>请遵守您所在国家/地区的法律法规。滥用相关技术可能违反法律。</p>
+  <p style="color:var(--accent-red);font-weight:bold;margin-top:8px;">本文不提供任何可执行的部署命令或完整配置文件。</p>
+</div>
+
+<!-- ==================== Section 1 ==================== -->
+<section id="section1">
+<h2>一、为什么需要 Trojan？（背景故事）</h2>
+
+<p>想象一下，你住在一个小区里，物业会检查所有进出的快递包裹。如果你的包裹是透明的（HTTP明文），物业一眼就能看到里面装了什么。</p>
+
+<div class="card analogy">
+  <h3>📖 故事比喻</h3>
+  <p><strong>HTTP 明文时代</strong>：就像在"明信片"上写东西——邮递员、邻居、任何经手的人都能看到内容。</p>
+  <p>所有人的网络流量都像透明的水管，中间任何节点都能看到你在访问什么、发送什么数据。</p>
+</div>
+
+<h3>Shadowsocks 的 HTTP 伪装为什么不够？</h3>
+<p>早期的加密代理（如 Shadowsocks）就像是把信封涂上了一层颜料——虽然看不到内容了，但这个"涂了颜料的信封"本身就很可疑！</p>
+<p>检查系统心想：<em>"正常人谁会把信封涂成这样？这肯定有问题！"</em></p>
+
+<div class="diagram">
+<svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- HTTP plaintext -->
+  <rect x="20" y="20" width="200" height="70" rx="8" fill="none" stroke="#f85149" stroke-width="2"/>
+  <text x="120" y="45" text-anchor="middle" fill="#f85149" font-size="12" font-weight="bold">HTTP 明文</text>
+  <text x="120" y="65" text-anchor="middle" fill="#8b949e" font-size="11">内容全部可见 👀</text>
+  <text x="120" y="82" text-anchor="middle" fill="#8b949e" font-size="10">→ 一眼就能看穿</text>
+  
+  <!-- SS encrypted -->
+  <rect x="250" y="20" width="200" height="70" rx="8" fill="none" stroke="#d29922" stroke-width="2"/>
+  <text x="350" y="45" text-anchor="middle" fill="#d29922" font-size="12" font-weight="bold">SS 加密流量</text>
+  <text x="350" y="65" text-anchor="middle" fill="#8b949e" font-size="11">内容加密了 🔒</text>
+  <text x="350" y="82" text-anchor="middle" fill="#8b949e" font-size="10">→ 但特征明显，像"乔装"</text>
+  
+  <!-- Trojan -->
+  <rect x="480" y="20" width="200" height="70" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="580" y="45" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">Trojan (HTTPS)</text>
+  <text x="580" y="65" text-anchor="middle" fill="#8b949e" font-size="11">和正常HTTPS一模一样 ✅</text>
+  <text x="580" y="82" text-anchor="middle" fill="#8b949e" font-size="10">→ 混在人群中，无法区分</text>
+  
+  <!-- Arrows -->
+  <path d="M 120 100 L 120 140" stroke="#f85149" stroke-width="2" marker-end="url(#arrow-red)"/>
+  <text x="120" y="165" text-anchor="middle" fill="#f85149" font-size="11">❌ 秒被发现</text>
+  
+  <path d="M 350 100 L 350 140" stroke="#d29922" stroke-width="2" marker-end="url(#arrow-orange)"/>
+  <text x="350" y="165" text-anchor="middle" fill="#d29922" font-size="11">⚠️ 能被识别</text>
+  
+  <path d="M 580 100 L 580 140" stroke="#3fb950" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <text x="580" y="165" text-anchor="middle" fill="#3fb950" font-size="11">✅ 完美隐藏</text>
+  
+  <defs>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#f85149"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#d29922"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#3fb950"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="card info">
+  <h3>💡 核心结论</h3>
+  <p>Trojan 的思路：<strong>不要"伪装"成 HTTPS，而是直接"就是" HTTPS！</strong></p>
+  <p>就像间谍电影里——最好的伪装不是化妆，而是根本就是那个身份。</p>
+  <p style="margin-top:10px;">类比：</p>
+  <ul style="margin-left:20px;">
+    <li>"在信封外面写假地址" → 依然是个可疑的信封（SS伪装）</li>
+    <li>"直接变成一封普普通通的信" → 没人会多看一眼（Trojan）</li>
+  </ul>
+</div>
+</section>
+
+<!-- ==================== Section 2 ==================== -->
+<section id="section2">
+<h2>二、HTTPS 到底是什么？（大白话版）</h2>
+
+<p>在理解 Trojan 之前，我们必须先搞清楚 HTTPS 是什么。别担心，我们用最简单的比喻来讲！</p>
+
+<div class="card analogy">
+  <h3>🎭 一句话理解</h3>
+  <p><strong>HTTP</strong> = 明信片 📮（谁都能看到你写了什么）</p>
+  <p><strong>HTTPS</strong> = 密封的信 ✉️（只有收件人能拆开看）</p>
+  <p><strong>HTTPS = HTTP + TLS</strong>（给明信片套了一层加密的信封）</p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg">
+  <!-- HTTP side -->
+  <text x="175" y="30" text-anchor="middle" fill="#f85149" font-size="14" font-weight="bold">HTTP（明文传输）</text>
+  <rect x="50" y="45" width="250" height="100" rx="10" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="175" y="75" text-anchor="middle" fill="#e6edf3" font-size="12">GET /login</text>
+  <text x="175" y="95" text-anchor="middle" fill="#e6edf3" font-size="12">username=admin</text>
+  <text x="175" y="115" text-anchor="middle" fill="#e6edf3" font-size="12">password=123456</text>
+  <text x="175" y="135" text-anchor="middle" fill="#f85149" font-size="10">👆 所有人都能看到！</text>
+  
+  <!-- HTTPS side -->
+  <text x="525" y="30" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="bold">HTTPS（加密传输）</text>
+  <rect x="400" y="45" width="250" height="100" rx="10" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <!-- Lock icon representation -->
+  <text x="525" y="75" text-anchor="middle" fill="#e6edf3" font-size="12">🔒 TLS 加密层</text>
+  <text x="525" y="100" text-anchor="middle" fill="#8b949e" font-size="12">aX9#kL2$mQ...</text>
+  <text x="525" y="120" text-anchor="middle" fill="#8b949e" font-size="12">看起来全是乱码</text>
+  <text x="525" y="140" text-anchor="middle" fill="#3fb950" font-size="10">👆 中间人完全看不懂！</text>
+  
+  <!-- Bottom explanation -->
+  <rect x="150" y="180" width="400" height="80" rx="10" fill="none" stroke="#58a6ff" stroke-width="1"/>
+  <text x="350" y="205" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="bold">HTTPS = HTTP + TLS</text>
+  <text x="350" y="230" text-anchor="middle" fill="#8b949e" font-size="11">TLS 就是那个"加密信封"</text>
+  <text x="350" y="250" text-anchor="middle" fill="#8b949e" font-size="11">内容（HTTP数据）不变，只是外面包了一层加密</text>
+</svg>
+</div>
+
+<p>当你在浏览器地址栏看到 <span class="keyword">https://</span> 和一个小锁图标 🔒 时，就表示这个连接是加密的。你的密码、聊天记录等敏感信息，中间的任何人（WiFi 管理员、运营商等）都<strong>看不到具体内容</strong>。</p>
+
+<div class="card info">
+  <h3>🔑 关键点</h3>
+  <p>现在互联网上超过 90% 的流量都是 HTTPS。这意味着 HTTPS 是"最不起眼"的流量类型——这正是 Trojan 利用的关键！</p>
+</div>
+</section>
+
+
+<!-- ==================== Section 3 ==================== -->
+<section id="section3">
+<h2>三、加密基础 — 对称加密 vs 非对称加密</h2>
+
+<p>要理解 TLS 怎么工作，我们需要先了解两种加密方式。放心，我们用"锁箱子"来讲，超级好懂！</p>
+
+<h3>🔐 对称加密：一把钥匙</h3>
+<div class="card analogy">
+  <p><strong>比喻</strong>：你和朋友约定了一把"暗号钥匙"，用它来锁箱子。你们俩都有这把钥匙，所以都能锁、都能开。</p>
+  <p><strong>优点</strong>：加密/解密速度很快 ⚡</p>
+  <p><strong>问题</strong>：钥匙怎么安全地传给对方？如果在传钥匙的过程中被截获，那加密就白费了！</p>
+</div>
+
+<h3>🔑 非对称加密：一对钥匙</h3>
+<div class="card analogy">
+  <p><strong>比喻</strong>：你制作了一个特殊的"锁头"（公钥）和"钥匙"（私钥）。</p>
+  <ul style="margin-left:20px;margin-top:8px;">
+    <li><strong>公钥（锁头）</strong>：你可以发给任何人，谁都能用它锁箱子</li>
+    <li><strong>私钥（钥匙）</strong>：只有你自己有，只有你能打开箱子</li>
+  </ul>
+  <p style="margin-top:8px;"><strong>优点</strong>：不用传"钥匙"，只传"锁头"，即使锁头被截获也无所谓</p>
+  <p><strong>问题</strong>：加密/解密速度比较慢 🐢</p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">TLS 的聪明做法：两者结合！</text>
+  
+  <!-- Step 1: Asymmetric -->
+  <rect x="30" y="45" width="300" height="120" rx="10" fill="none" stroke="#bc8cff" stroke-width="2"/>
+  <text x="180" y="70" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="bold">第一步：非对称加密（交换钥匙）</text>
+  <text x="180" y="95" text-anchor="middle" fill="#e6edf3" font-size="11">服务器发送公钥（锁头）给客户端</text>
+  <text x="180" y="115" text-anchor="middle" fill="#e6edf3" font-size="11">客户端用公钥加密一个"会话密钥"</text>
+  <text x="180" y="135" text-anchor="middle" fill="#e6edf3" font-size="11">发回服务器 → 只有服务器能解开</text>
+  <text x="180" y="155" text-anchor="middle" fill="#8b949e" font-size="10">🐢 慢，但只需要做一次</text>
+  
+  <!-- Arrow -->
+  <path d="M340 105 L370 105" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  
+  <!-- Step 2: Symmetric -->
+  <rect x="380" y="45" width="300" height="120" rx="10" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="530" y="70" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">第二步：对称加密（正式通信）</text>
+  <text x="530" y="95" text-anchor="middle" fill="#e6edf3" font-size="11">双方现在都有了同一个"会话密钥"</text>
+  <text x="530" y="115" text-anchor="middle" fill="#e6edf3" font-size="11">之后所有数据都用这个密钥加密</text>
+  <text x="530" y="135" text-anchor="middle" fill="#e6edf3" font-size="11">速度飞快 + 安全</text>
+  <text x="530" y="155" text-anchor="middle" fill="#8b949e" font-size="10">⚡ 快！一直用到连接结束</text>
+  
+  <!-- Summary -->
+  <rect x="100" y="200" width="500" height="100" rx="10" fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="350" y="225" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="bold">🧠 一句话总结</text>
+  <text x="350" y="252" text-anchor="middle" fill="#e6edf3" font-size="12">非对称加密 → 安全地"握手"交换密钥（慢但安全）</text>
+  <text x="350" y="278" text-anchor="middle" fill="#e6edf3" font-size="12">对称加密 → 用交换好的密钥快速通信（快且安全）</text>
+  
+  <defs>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#58a6ff"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="card success">
+  <h3>✅ 小结</h3>
+  <p>TLS 的精妙之处在于：用<strong>非对称加密</strong>安全地交换钥匙（解决了钥匙传递问题），然后用<strong>对称加密</strong>高速通信（解决了速度问题）。两全其美！</p>
+</div>
+</section>
+
+<!-- ==================== Section 4 ==================== -->
+<section id="section4">
+<h2>四、网站证书与 CA 机构</h2>
+
+<p>非对称加密解决了传输安全的问题，但还有一个问题：<strong>你怎么确定对面真的是你想连的服务器？</strong></p>
+
+<div class="card analogy">
+  <h3>🏦 银行的比喻</h3>
+  <p>假设你去银行办事，有人在路边摆了个摊，说"我就是银行"——你信吗？</p>
+  <p>你不信。你要看它有没有<strong>营业执照</strong>。而这个执照是谁发的？是<strong>工商局</strong>（权威机构）发的。</p>
+  <p>在网络世界里：</p>
+  <ul style="margin-left:20px;">
+    <li>营业执照 = <strong>TLS 证书</strong></li>
+    <li>工商局 = <strong>CA（证书颁发机构）</strong></li>
+  </ul>
+</div>
+
+<h3>为什么需要证书？</h3>
+<p>没有证书，攻击者可以冒充任何网站（中间人攻击）。有了证书体系，浏览器可以验证"这个网站确实是它声称的那个网站"。</p>
+
+<h3>证书里有什么？</h3>
+<div class="card info">
+  <ul style="margin-left:20px;">
+    <li>📍 <strong>域名</strong>：这个证书属于哪个网站（如 example.com）</li>
+    <li>🔑 <strong>公钥</strong>：网站的公钥，客户端用它加密数据</li>
+    <li>📅 <strong>有效期</strong>：证书什么时候过期</li>
+    <li>✍️ <strong>CA 签名</strong>：CA 机构的"盖章"，证明这个证书是真的</li>
+  </ul>
+</div>
+
+<h3>申请证书的过程（概念）</h3>
+<p>简单来说：你需要向 CA 证明<strong>你真的拥有这个域名</strong>。CA 会通过各种方式验证（比如让你在网站上放一个特定文件，或者设置一条 DNS 记录）。验证通过后，CA 给你签发证书。</p>
+
+<p>常见的免费 CA：<span class="keyword">Let's Encrypt</span>、<span class="keyword">ZeroSSL</span> 等。</p>
+
+<div class="diagram">
+<svg viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">证书信任链</text>
+  
+  <!-- Root CA -->
+  <rect x="250" y="45" width="200" height="50" rx="8" fill="none" stroke="#d29922" stroke-width="2"/>
+  <text x="350" y="67" text-anchor="middle" fill="#d29922" font-size="12" font-weight="bold">🏛️ 根 CA</text>
+  <text x="350" y="85" text-anchor="middle" fill="#8b949e" font-size="10">（预装在操作系统/浏览器中）</text>
+  
+  <!-- Arrow down -->
+  <path d="M350 95 L350 115" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow-gray)"/>
+  <text x="400" y="110" fill="#8b949e" font-size="9">签发</text>
+  
+  <!-- Intermediate CA -->
+  <rect x="250" y="120" width="200" height="50" rx="8" fill="none" stroke="#bc8cff" stroke-width="2"/>
+  <text x="350" y="142" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="bold">🏢 中间 CA</text>
+  <text x="350" y="160" text-anchor="middle" fill="#8b949e" font-size="10">（如 Let's Encrypt）</text>
+  
+  <!-- Arrow down -->
+  <path d="M350 170 L350 190" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow-gray)"/>
+  <text x="400" y="185" fill="#8b949e" font-size="9">签发</text>
+  
+  <!-- Site Certificate -->
+  <rect x="250" y="195" width="200" height="50" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="350" y="217" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">🌐 你的网站证书</text>
+  <text x="350" y="235" text-anchor="middle" fill="#8b949e" font-size="10">（example.com）</text>
+  
+  <!-- Left explanation -->
+  <text x="100" y="75" text-anchor="middle" fill="#8b949e" font-size="10">浏览器信任它</text>
+  <path d="M160 70 L245 70" stroke="#8b949e" stroke-width="1" stroke-dasharray="3,3"/>
+  
+  <text x="100" y="150" text-anchor="middle" fill="#8b949e" font-size="10">根CA信任它</text>
+  <path d="M160 145 L245 145" stroke="#8b949e" stroke-width="1" stroke-dasharray="3,3"/>
+  
+  <text x="100" y="220" text-anchor="middle" fill="#8b949e" font-size="10">中间CA信任它</text>
+  <path d="M160 215 L245 220" stroke="#8b949e" stroke-width="1" stroke-dasharray="3,3"/>
+  
+  <defs>
+    <marker id="arrow-gray" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#8b949e"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="card success">
+  <h3>✅ 信任链原理</h3>
+  <p>浏览器信任根 CA → 根 CA 信任中间 CA → 中间 CA 为你的网站背书。<br>一层一层向上追溯，最终追溯到浏览器/操作系统预装的根证书。</p>
+</div>
+</section>
+
+
+<!-- ==================== Section 5 ==================== -->
+<section id="section5">
+<h2>五、TLS 握手过程（图解）</h2>
+
+<p>好了，现在我们把前面学到的东西串起来！当你的浏览器连接一个 HTTPS 网站时，会发生以下"握手"过程：</p>
+
+<div class="step-controls">
+  <button onclick="prevStep()">⬅ 上一步</button>
+  <button onclick="nextStep()">下一步 ➡</button>
+  <button onclick="resetSteps()">🔄 重置</button>
+</div>
+
+<div class="tls-steps" id="tlsSteps">
+  <div class="tls-step active" data-step="1">
+    <span class="step-num">1</span>
+    <strong>Client Hello（客户端打招呼）</strong>
+    <p style="margin-top:6px;color:var(--text-secondary);font-size:13px;">浏览器说："你好！我支持这些加密方式，我想访问 <strong>example.com</strong>（这就是 SNI）"</p>
+  </div>
+  <div class="tls-step" data-step="2">
+    <span class="step-num">2</span>
+    <strong>Server Hello + 证书（服务器回应）</strong>
+    <p style="margin-top:6px;color:var(--text-secondary);font-size:13px;">服务器说："好的，我们用这个加密方式。这是我的证书（里面有我的公钥）。"</p>
+  </div>
+  <div class="tls-step" data-step="3">
+    <span class="step-num">3</span>
+    <strong>客户端验证证书</strong>
+    <p style="margin-top:6px;color:var(--text-secondary);font-size:13px;">浏览器检查：证书是否由可信CA签发？域名对不对？有没有过期？一切OK才继续。</p>
+  </div>
+  <div class="tls-step" data-step="4">
+    <span class="step-num">4</span>
+    <strong>交换会话密钥</strong>
+    <p style="margin-top:6px;color:var(--text-secondary);font-size:13px;">客户端生成一个随机的"会话密钥"，用服务器的公钥加密后发过去。只有服务器的私钥能解开。</p>
+  </div>
+  <div class="tls-step" data-step="5">
+    <span class="step-num">5</span>
+    <strong>🎉 加密通信开始！</strong>
+    <p style="margin-top:6px;color:var(--text-secondary);font-size:13px;">双方都有了会话密钥，之后的所有数据都用对称加密传输。速度快、安全！</p>
+  </div>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">TLS 握手过程示意图</text>
+  
+  <!-- Client -->
+  <rect x="50" y="50" width="100" height="280" rx="8" fill="none" stroke="#58a6ff" stroke-width="2"/>
+  <text x="100" y="75" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="bold">🖥️ 客户端</text>
+  
+  <!-- Server -->
+  <rect x="550" y="50" width="100" height="280" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="600" y="75" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">🌐 服务器</text>
+  
+  <!-- Step 1 -->
+  <line x1="150" y1="110" x2="550" y2="110" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow-blue2)"/>
+  <text x="350" y="105" text-anchor="middle" fill="#e6edf3" font-size="10">① Client Hello + 支持的加密套件 + SNI</text>
+  
+  <!-- Step 2 -->
+  <line x1="550" y1="155" x2="150" y2="155" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green2)"/>
+  <text x="350" y="150" text-anchor="middle" fill="#e6edf3" font-size="10">② Server Hello + 证书（含公钥）</text>
+  
+  <!-- Step 3 -->
+  <rect x="160" y="175" width="150" height="30" rx="5" fill="none" stroke="#d29922" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="235" y="194" text-anchor="middle" fill="#d29922" font-size="9">③ 验证证书（本地完成）</text>
+  
+  <!-- Step 4 -->
+  <line x1="150" y1="230" x2="550" y2="230" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <text x="350" y="225" text-anchor="middle" fill="#e6edf3" font-size="10">④ 用公钥加密的会话密钥</text>
+  
+  <!-- Step 5 -->
+  <line x1="150" y1="280" x2="550" y2="280" stroke="#3fb950" stroke-width="1.5"/>
+  <line x1="550" y1="300" x2="150" y2="300" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="200" y="270" width="300" height="40" rx="5" fill="none" stroke="#3fb950" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="350" y="293" text-anchor="middle" fill="#3fb950" font-size="10">⑤ 对称加密通信 🔒⚡</text>
+  
+  <defs>
+    <marker id="arrow-blue2" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green2" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#bc8cff"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="card warning">
+  <h3>⚠️ SNI 的问题</h3>
+  <p>注意第①步：客户端在还没加密的时候，就把要访问的域名（SNI）发出去了！</p>
+  <p>这意味着<strong>中间人虽然看不到你传的内容，但能看到你要访问哪个网站</strong>。</p>
+  <p>这是目前 TLS 的一个"缺陷"，后面会详细讲它对 Trojan 的影响。</p>
+</div>
+</section>
+
+<!-- ==================== Section 6 ==================== -->
+<section id="section6">
+<h2>六、Trojan 的核心原理 — "瞒天过海"</h2>
+
+<p>终于到了主角登场！前面铺垫了这么多，就是为了理解 Trojan 的精妙设计。</p>
+
+<div class="card analogy">
+  <h3>🌲 核心思想</h3>
+  <p><strong>"想藏一棵树，最好的地方是森林。"</strong></p>
+  <p>互联网上最多的流量是什么？HTTPS！</p>
+  <p>Trojan 不发明新的加密方式，它直接<strong>使用真正的 TLS/HTTPS</strong>。在外面看来，Trojan 的流量和你访问淘宝、刷微博的流量一模一样！</p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">正常 HTTPS vs Trojan — 外表完全相同</text>
+  
+  <!-- Normal HTTPS -->
+  <text x="350" y="60" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">正常 HTTPS 访问网站：</text>
+  <rect x="50" y="70" width="100" height="40" rx="6" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="100" y="95" text-anchor="middle" fill="#58a6ff" font-size="10">🖥️ 浏览器</text>
+  
+  <rect x="250" y="70" width="200" height="40" rx="6" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="350" y="93" text-anchor="middle" fill="#3fb950" font-size="10">🔒 TLS 加密隧道</text>
+  
+  <rect x="550" y="70" width="100" height="40" rx="6" fill="none" stroke="#d29922" stroke-width="1.5"/>
+  <text x="600" y="95" text-anchor="middle" fill="#d29922" font-size="10">🌐 目标网站</text>
+  
+  <line x1="150" y1="90" x2="250" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  <line x1="450" y1="90" x2="550" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Trojan -->
+  <text x="350" y="150" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="bold">Trojan 代理：</text>
+  <rect x="50" y="160" width="100" height="40" rx="6" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="100" y="185" text-anchor="middle" fill="#58a6ff" font-size="10">🖥️ Trojan客户端</text>
+  
+  <rect x="250" y="160" width="200" height="40" rx="6" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="350" y="183" text-anchor="middle" fill="#3fb950" font-size="10">🔒 TLS 加密隧道（一模一样!）</text>
+  
+  <rect x="550" y="160" width="100" height="40" rx="6" fill="none" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="600" y="185" text-anchor="middle" fill="#bc8cff" font-size="10">🛡️ Trojan服务器</text>
+  
+  <line x1="150" y1="180" x2="250" y2="180" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  <line x1="450" y1="180" x2="550" y2="180" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Firewall observation -->
+  <rect x="200" y="220" width="300" height="80" rx="10" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="350" y="245" text-anchor="middle" fill="#f85149" font-size="11" font-weight="bold">🔍 防火墙看到的：</text>
+  <text x="350" y="268" text-anchor="middle" fill="#8b949e" font-size="11">两种情况看起来完全一样！</text>
+  <text x="350" y="288" text-anchor="middle" fill="#8b949e" font-size="11">都是标准的 TLS 流量 → 443 端口</text>
+</svg>
+</div>
+
+<h3>🔑 密码机制</h3>
+<p>那 Trojan 服务器怎么区分"正常访客"和"代理用户"呢？</p>
+
+<div class="card info">
+  <p>秘密在于：<strong>在 TLS 加密隧道建立之后</strong>，Trojan 客户端会在第一个数据包里发送一个<strong>预设的密码</strong>（password）。</p>
+  <p>因为这个密码是在加密隧道内部传输的，外部观察者<strong>完全看不到</strong>！</p>
+  <ul style="margin-left:20px;margin-top:8px;">
+    <li>密码正确 → 你是自己人，开始代理转发</li>
+    <li>密码错误 → 当作普通访客，返回正常网页</li>
+  </ul>
+</div>
+
+<div class="card success">
+  <h3>💡 为什么防火墙分辨不了？</h3>
+  <p>因为 Trojan 使用的是<strong>真正的 TLS 证书</strong>、<strong>真正的 443 端口</strong>、<strong>标准的 TLS 握手</strong>。</p>
+  <p>从外部看，它和你访问百度、Google 的 HTTPS 连接没有任何区别——因为它本来就是标准 HTTPS！</p>
+</div>
+</section>
+
+
+<!-- ==================== Section 7 ==================== -->
+<section id="section7">
+<h2>七、Trojan 的防探测机制（回落/Fallback）</h2>
+
+<p>聪明的检测系统可能会主动连接你的服务器来"试探"。Trojan 的回落机制就是应对这种"主动探测"的杀手锏。</p>
+
+<div class="card analogy">
+  <h3>🎭 比喻：带密室的咖啡店</h3>
+  <p>想象一家咖啡店，表面上就是个正常的咖啡店。但如果你跟店员说出正确的暗号，你就能进入后面的密室。</p>
+  <p>如果暗号不对？没关系，你就是个正常客人，给你一杯咖啡。</p>
+  <p>如果有人来检查？他看到的就是一家正常的咖啡店！</p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 380" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">Trojan 服务器决策流程</text>
+  
+  <!-- Incoming connection -->
+  <rect x="250" y="45" width="200" height="36" rx="8" fill="none" stroke="#58a6ff" stroke-width="2"/>
+  <text x="350" y="68" text-anchor="middle" fill="#58a6ff" font-size="11">收到 TLS 连接请求</text>
+  
+  <!-- Arrow down -->
+  <line x1="350" y1="81" x2="350" y2="100" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  
+  <!-- TLS Handshake -->
+  <rect x="250" y="105" width="200" height="36" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="350" y="128" text-anchor="middle" fill="#3fb950" font-size="11">正常完成 TLS 握手 ✅</text>
+  
+  <!-- Arrow down -->
+  <line x1="350" y1="141" x2="350" y2="160" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Decision diamond -->
+  <polygon points="350,165 480,210 350,255 220,210" fill="none" stroke="#d29922" stroke-width="2"/>
+  <text x="350" y="207" text-anchor="middle" fill="#d29922" font-size="11">密码正确？</text>
+  <text x="350" y="222" text-anchor="middle" fill="#d29922" font-size="10">（在加密隧道内检查）</text>
+  
+  <!-- Yes branch -->
+  <line x1="480" y1="210" x2="580" y2="210" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green2)"/>
+  <text x="530" y="200" fill="#3fb950" font-size="10">✅ 正确</text>
+  <rect x="555" y="195" width="130" height="36" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="620" y="217" text-anchor="middle" fill="#3fb950" font-size="10">转发代理流量</text>
+  
+  <!-- Arrow to target -->
+  <line x1="620" y1="231" x2="620" y2="260" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green2)"/>
+  <rect x="555" y="265" width="130" height="30" rx="6" fill="none" stroke="#3fb950" stroke-width="1"/>
+  <text x="620" y="284" text-anchor="middle" fill="#8b949e" font-size="9">→ 访问目标网站</text>
+  
+  <!-- No branch -->
+  <line x1="220" y1="210" x2="120" y2="210" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <text x="170" y="200" fill="#f85149" font-size="10">❌ 错误</text>
+  <rect x="15" y="195" width="130" height="36" rx="8" fill="none" stroke="#f85149" stroke-width="2"/>
+  <text x="80" y="217" text-anchor="middle" fill="#f85149" font-size="10">回落到真网站</text>
+  
+  <!-- Arrow to real site -->
+  <line x1="80" y1="231" x2="80" y2="260" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <rect x="15" y="265" width="130" height="30" rx="6" fill="none" stroke="#f85149" stroke-width="1"/>
+  <text x="80" y="284" text-anchor="middle" fill="#8b949e" font-size="9">→ 返回正常网页</text>
+  
+  <!-- Bottom explanation -->
+  <rect x="100" y="315" width="500" height="50" rx="8" fill="none" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="350" y="338" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="bold">结果：无论谁来探测，看到的都是一个正常的网站！</text>
+  <text x="350" y="355" text-anchor="middle" fill="#8b949e" font-size="10">服务器同时是网站 + 代理，一石二鸟 🎯</text>
+</svg>
+</div>
+
+<div class="card success">
+  <h3>🧠 为什么这很巧妙？</h3>
+  <ul style="margin-left:20px;">
+    <li>主动探测？访问到的就是一个真正的网站，看不出任何异常</li>
+    <li>统计分析？服务器确实在提供网页服务，流量特征完全正常</li>
+    <li>真正的用户？密码一对，无缝切换成代理模式</li>
+  </ul>
+  <p style="margin-top:10px;">这就是为什么 Trojan 被称为"最像正常流量"的协议——因为它<strong>本身就是</strong>正常流量的一部分！</p>
+</div>
+</section>
+
+<!-- ==================== Section 8 ==================== -->
+<section id="section8">
+<h2>八、SNI 的重要性与风险</h2>
+
+<p>还记得 TLS 握手第一步中的 SNI（Server Name Indication）吗？这是 Trojan 目前<strong>最大的弱点</strong>。</p>
+
+<div class="card warning">
+  <h3>🚨 SNI 是什么问题？</h3>
+  <p>在 TLS 握手的最开始，客户端需要告诉服务器"我要访问哪个域名"——而这个信息是<strong>明文</strong>的！</p>
+  <p>这意味着防火墙虽然看不到你传输的内容，但<strong>能看到你在连接哪个域名</strong>。</p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 180" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">SNI 泄露问题</text>
+  
+  <!-- Client -->
+  <rect x="30" y="50" width="90" height="40" rx="6" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="75" y="74" text-anchor="middle" fill="#58a6ff" font-size="10">🖥️ 客户端</text>
+  
+  <!-- Firewall -->
+  <rect x="250" y="40" width="120" height="60" rx="6" fill="none" stroke="#f85149" stroke-width="2"/>
+  <text x="310" y="65" text-anchor="middle" fill="#f85149" font-size="10">🔍 防火墙</text>
+  <text x="310" y="82" text-anchor="middle" fill="#8b949e" font-size="9">"我看到 SNI 了！"</text>
+  
+  <!-- Server -->
+  <rect x="550" y="50" width="110" height="40" rx="6" fill="none" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="605" y="74" text-anchor="middle" fill="#3fb950" font-size="10">🛡️ Trojan服务器</text>
+  
+  <!-- Arrows -->
+  <line x1="120" y1="70" x2="250" y2="70" stroke="#d29922" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <text x="185" y="60" text-anchor="middle" fill="#d29922" font-size="9">SNI: my-proxy.com</text>
+  
+  <line x1="370" y1="70" x2="550" y2="70" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Note -->
+  <text x="350" y="135" text-anchor="middle" fill="#f85149" font-size="11">如果 my-proxy.com 被标记 → 连接可能被干扰！</text>
+  <text x="350" y="160" text-anchor="middle" fill="#8b949e" font-size="10">内容看不到，但"你在连谁"暴露了</text>
+</svg>
+</div>
+
+<h3>应对策略</h3>
+<div class="card info">
+  <ul style="margin-left:20px;">
+    <li>🎭 <strong>使用普通域名</strong>：不要用 proxy.xxx.com 这种一看就很可疑的域名</li>
+    <li>🤫 <strong>不要公开分享</strong>：一旦太多人用同一个域名，容易引起注意</li>
+    <li>🌐 <strong>搭配 CDN</strong>：用 CDN 可以"隐藏"真实服务器 IP</li>
+    <li>🔮 <strong>未来技术 — ECH</strong>（Encrypted Client Hello）：把 SNI 也加密！目前还在推广中</li>
+  </ul>
+</div>
+
+<div class="card info">
+  <h3>🔮 ECH — 未来的解决方案</h3>
+  <p><strong>Encrypted Client Hello (ECH)</strong> 是 TLS 1.3 的扩展，目标是把 SNI 也加密起来。</p>
+  <p>一旦 ECH 普及，防火墙连"你在连谁"都看不到了。但目前支持还不完善，需要更多时间推广。</p>
+</div>
+</section>
+
+<!-- ==================== Section 9 ==================== -->
+<section id="section9">
+<h2>九、配置概念流程（只讲概念，不给命令）</h2>
+
+<div class="card warning">
+  <h3>⚠️ 再次声明</h3>
+  <p>本节仅解释概念性流程，帮助你理解每一步"为什么"要这样做。<strong>不提供具体命令或配置文件</strong>。</p>
+</div>
+
+<p>如果要搭建 Trojan 服务（纯概念理解），整个流程大概是这样的：</p>
+
+<div class="diagram">
+<svg viewBox="0 0 700 520" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">概念性配置流程图</text>
+  
+  <!-- Step 1 -->
+  <rect x="200" y="45" width="300" height="40" rx="8" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="220" y="69" fill="#58a6ff" font-size="11">①</text>
+  <text x="350" y="69" text-anchor="middle" fill="#e6edf3" font-size="11">准备一台海外服务器</text>
+  <line x1="350" y1="85" x2="350" y2="100" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 2 -->
+  <rect x="200" y="105" width="300" height="40" rx="8" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="220" y="129" fill="#58a6ff" font-size="11">②</text>
+  <text x="350" y="129" text-anchor="middle" fill="#e6edf3" font-size="11">获取一个域名</text>
+  <line x1="350" y1="145" x2="350" y2="160" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 3 -->
+  <rect x="200" y="165" width="300" height="40" rx="8" fill="none" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="220" y="189" fill="#3fb950" font-size="11">③</text>
+  <text x="350" y="189" text-anchor="middle" fill="#e6edf3" font-size="11">将域名 DNS 解析指向服务器 IP</text>
+  <line x1="350" y1="205" x2="350" y2="220" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 4 -->
+  <rect x="200" y="225" width="300" height="40" rx="8" fill="none" stroke="#d29922" stroke-width="1.5"/>
+  <text x="220" y="249" fill="#d29922" font-size="11">④</text>
+  <text x="350" y="249" text-anchor="middle" fill="#e6edf3" font-size="11">向 CA 申请 TLS 证书</text>
+  <line x1="350" y1="265" x2="350" y2="280" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 5 -->
+  <rect x="200" y="285" width="300" height="50" rx="8" fill="none" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="220" y="307" fill="#bc8cff" font-size="11">⑤</text>
+  <text x="355" y="307" text-anchor="middle" fill="#e6edf3" font-size="11">服务端配置：安装服务程序</text>
+  <text x="350" y="325" text-anchor="middle" fill="#8b949e" font-size="9">配置证书 + 密码 + 回落网站</text>
+  <line x1="350" y1="335" x2="350" y2="350" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 6 -->
+  <rect x="200" y="355" width="300" height="50" rx="8" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="220" y="377" fill="#58a6ff" font-size="11">⑥</text>
+  <text x="355" y="377" text-anchor="middle" fill="#e6edf3" font-size="11">客户端填写配置</text>
+  <text x="350" y="395" text-anchor="middle" fill="#8b949e" font-size="9">域名 + 端口(443) + 密码 + SNI</text>
+  <line x1="350" y1="405" x2="350" y2="420" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  
+  <!-- Step 7 -->
+  <rect x="200" y="425" width="300" height="40" rx="8" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="220" y="449" fill="#3fb950" font-size="11">⑦</text>
+  <text x="350" y="449" text-anchor="middle" fill="#3fb950" font-size="11">🎉 测试连接！</text>
+  
+  <!-- Side notes -->
+  <text x="560" y="129" fill="#8b949e" font-size="9">为何：需要一个"门牌号"</text>
+  <text x="560" y="189" fill="#8b949e" font-size="9">为何：让域名指向你的机器</text>
+  <text x="560" y="249" fill="#8b949e" font-size="9">为何：证明身份+启用TLS</text>
+  <text x="560" y="377" fill="#8b949e" font-size="9">为何：告诉客户端怎么连</text>
+</svg>
+</div>
+
+<h3>关于每一步的解释</h3>
+<div class="card info">
+  <p><strong>为什么需要域名？</strong> 因为 TLS 证书是绑定域名的。没有域名就无法获得正规 CA 颁发的证书。</p>
+  <p><strong>为什么需要证书？</strong> 没有证书，TLS 握手无法完成，客户端会报错。而且有了证书，外部看来你就是一个正常的 HTTPS 网站。</p>
+  <p><strong>为什么需要回落网站？</strong> 这是"防探测"的核心——让任何探测者看到的都是一个正常网站。</p>
+  <p><strong>自签证书可以吗？</strong> 可以，但客户端需要跳过证书验证，而且缺少 CA 背书，有一定的安全风险和识别风险。</p>
+</div>
+</section>
+
+
+<!-- ==================== Section 10 ==================== -->
+<section id="section10">
+<h2>十、知识测验 + 总结</h2>
+
+<h3>📝 测试一下你学到了多少！</h3>
+
+<div class="quiz-item">
+  <h4>问题 1：Trojan 为什么选择"伪装"成 HTTPS 流量？</h4>
+  <div class="quiz-options">
+    <label><input type="radio" name="q1" value="a"> A. 因为 HTTPS 加密强度最高</label>
+    <label><input type="radio" name="q1" value="b"> B. 因为 HTTPS 是互联网上最常见的流量，混在其中最不显眼</label>
+    <label><input type="radio" name="q1" value="c"> C. 因为 HTTPS 不需要服务器</label>
+    <label><input type="radio" name="q1" value="d"> D. 因为 HTTPS 免费</label>
+  </div>
+  <button class="quiz-btn" onclick="showAnswer('a1')">查看答案</button>
+  <div class="quiz-answer" id="a1">
+    ✅ <strong>答案：B</strong><br>
+    HTTPS 占互联网流量的 90% 以上。"想藏一棵树，最好的地方是森林"——Trojan 让自己的流量和千千万万的正常 HTTPS 请求混在一起，无法被区分。
+  </div>
+</div>
+
+<div class="quiz-item">
+  <h4>问题 2：TLS 握手中的 SNI 字段有什么安全隐患？</h4>
+  <div class="quiz-options">
+    <label><input type="radio" name="q2" value="a"> A. SNI 会泄露传输的文件内容</label>
+    <label><input type="radio" name="q2" value="b"> B. SNI 是明文的，会暴露你要访问的域名</label>
+    <label><input type="radio" name="q2" value="c"> C. SNI 会暴露你的密码</label>
+    <label><input type="radio" name="q2" value="d"> D. SNI 没有任何安全问题</label>
+  </div>
+  <button class="quiz-btn" onclick="showAnswer('a2')">查看答案</button>
+  <div class="quiz-answer" id="a2">
+    ✅ <strong>答案：B</strong><br>
+    SNI（Server Name Indication）在 TLS 握手的开始阶段以明文发送，告知服务器客户端想连接哪个域名。这意味着中间人可以看到你在访问哪个网站（但看不到具体内容）。
+  </div>
+</div>
+
+<div class="quiz-item">
+  <h4>问题 3：Trojan 的"回落"（Fallback）机制的作用是什么？</h4>
+  <div class="quiz-options">
+    <label><input type="radio" name="q3" value="a"> A. 加速网络连接</label>
+    <label><input type="radio" name="q3" value="b"> B. 当密码错误时返回真实网站内容，防止探测</label>
+    <label><input type="radio" name="q3" value="c"> C. 自动更新证书</label>
+    <label><input type="radio" name="q3" value="d"> D. 备份数据</label>
+  </div>
+  <button class="quiz-btn" onclick="showAnswer('a3')">查看答案</button>
+  <div class="quiz-answer" id="a3">
+    ✅ <strong>答案：B</strong><br>
+    回落机制是 Trojan 的精妙设计：如果有人（包括主动探测系统）连接时没有提供正确的密码，服务器就表现得像一个普通的网站，返回正常的网页内容。这样探测者无法判断这是一个代理服务器。
+  </div>
+</div>
+
+<div class="quiz-item">
+  <h4>问题 4：为什么 Trojan 需要一个真正的 TLS 证书？</h4>
+  <div class="quiz-options">
+    <label><input type="radio" name="q4" value="a"> A. 法律要求</label>
+    <label><input type="radio" name="q4" value="b"> B. 为了让 TLS 握手完全正常，使流量与普通 HTTPS 网站一模一样</label>
+    <label><input type="radio" name="q4" value="c"> C. 证书越贵越安全</label>
+    <label><input type="radio" name="q4" value="d"> D. 没有证书无法上网</label>
+  </div>
+  <button class="quiz-btn" onclick="showAnswer('a4')">查看答案</button>
+  <div class="quiz-answer" id="a4">
+    ✅ <strong>答案：B</strong><br>
+    使用正规 CA 颁发的证书可以让 Trojan 服务器的 TLS 握手过程与任何正常 HTTPS 网站完全一致。如果用自签证书，虽然也能用，但 TLS 行为可能有细微差异，增加被识别的风险。
+  </div>
+</div>
+
+<div class="quiz-item">
+  <h4>问题 5：TLS 为什么要"先非对称、后对称"地加密？</h4>
+  <div class="quiz-options">
+    <label><input type="radio" name="q5" value="a"> A. 非对称加密解决"钥匙怎么传"的问题，对称加密解决速度问题</label>
+    <label><input type="radio" name="q5" value="b"> B. 没有原因，只是历史遗留</label>
+    <label><input type="radio" name="q5" value="c"> C. 对称加密不安全</label>
+    <label><input type="radio" name="q5" value="d"> D. 非对称加密速度更快</label>
+  </div>
+  <button class="quiz-btn" onclick="showAnswer('a5')">查看答案</button>
+  <div class="quiz-answer" id="a5">
+    ✅ <strong>答案：A</strong><br>
+    非对称加密安全但慢，对称加密快但需要"提前约好钥匙"。TLS 的聪明做法：先用非对称加密安全地交换一个对称密钥，然后用这个对称密钥进行快速的通信加密。两者优势互补！
+  </div>
+</div>
+
+<h3>📊 协议对比表</h3>
+
+<table class="comparison-table">
+  <thead>
+    <tr>
+      <th>特性</th>
+      <th>Shadowsocks</th>
+      <th>SS + 混淆插件</th>
+      <th>Trojan</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>加密方式</td>
+      <td>自定义加密</td>
+      <td>自定义加密 + 伪装</td>
+      <td>标准 TLS</td>
+    </tr>
+    <tr>
+      <td>流量特征</td>
+      <td>随机字节流，可识别</td>
+      <td>像 HTTP 但不完美</td>
+      <td>与真 HTTPS 完全相同</td>
+    </tr>
+    <tr>
+      <td>抗主动探测</td>
+      <td>❌ 弱</td>
+      <td>⚠️ 中等</td>
+      <td>✅ 强（回落机制）</td>
+    </tr>
+    <tr>
+      <td>需要域名/证书</td>
+      <td>❌ 不需要</td>
+      <td>❌ 不需要</td>
+      <td>✅ 需要（最佳实践）</td>
+    </tr>
+    <tr>
+      <td>搭建难度</td>
+      <td>⭐ 简单</td>
+      <td>⭐⭐ 中等</td>
+      <td>⭐⭐⭐ 较复杂</td>
+    </tr>
+    <tr>
+      <td>安全性</td>
+      <td>⭐⭐</td>
+      <td>⭐⭐⭐</td>
+      <td>⭐⭐⭐⭐⭐</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card info">
+  <h3>🔮 未来方向</h3>
+  <p>技术在不断演进，以下是一些新兴协议/技术：</p>
+  <ul style="margin-left:20px;">
+    <li><strong>VLESS</strong>：更轻量的协议，去掉了多余的加密层（因为 TLS 本身已经加密了）</li>
+    <li><strong>Reality</strong>：解决了 SNI 和证书问题，可以"借用"其他网站的证书！更难被识别</li>
+    <li><strong>ECH</strong>：加密 SNI，从根本上解决域名泄露问题</li>
+  </ul>
+</div>
+
+<div class="card success">
+  <h3>🎓 总结</h3>
+  <p>恭喜你读到这里！让我们回顾一下核心知识：</p>
+  <ol style="margin-left:20px;">
+    <li>Trojan 利用真正的 HTTPS/TLS 来隐藏代理流量</li>
+    <li>TLS = 非对称加密握手 + 对称加密通信</li>
+    <li>证书由 CA 颁发，确保服务器身份可信</li>
+    <li>回落机制让服务器在探测面前表现为正常网站</li>
+    <li>SNI 是当前主要弱点，ECH 是未来的解决方案</li>
+  </ol>
+</div>
+</section>
+
+
+<!-- ==================== Bonus Section: SOCKS5 vs HTTP Proxy ==================== -->
+<section id="section-proxy">
+<h2>附录：SOCKS5 代理 vs HTTP/HTTPS 代理 — 到底该配哪个？</h2>
+
+<p>很多代理软件（如 Clash、V2Ray、Trojan 客户端）启动后会同时提供 <span class="keyword">SOCKS5</span> 和 <span class="keyword">HTTP/HTTPS</span> 两种代理接口。你在配置其他软件时，到底该填哪个？让我们搞清楚。</p>
+
+<div class="card analogy">
+  <h3>🎭 一个比喻</h3>
+  <p>想象你要把一个包裹交给快递员帮你转发：</p>
+  <ul style="margin-left:20px;">
+    <li><strong>HTTP 代理</strong>：像一个"翻译中介"——它会打开你的包裹看一下内容（理解 HTTP 协议），然后重新打包帮你转发。它只认识"网页请求"这种包裹。</li>
+    <li><strong>SOCKS5 代理</strong>：像一个"万能快递员"——你给它什么包裹它就转发什么，不管里面是什么内容、什么格式。它不打开，也不需要理解。</li>
+  </ul>
+</div>
+
+<div class="proxy-compare">
+  <div class="proxy-card">
+    <h4>📡 SOCKS5 代理</h4>
+    <ul>
+      <li>工作在<strong>传输层</strong>（更底层）</li>
+      <li>支持<strong>任意协议</strong>：HTTP、FTP、SMTP、游戏、P2P...</li>
+      <li>不解析流量内容，只负责转发</li>
+      <li>支持 TCP 和 UDP</li>
+      <li>更通用、更强大</li>
+      <li>默认端口通常：1080</li>
+    </ul>
+  </div>
+  <div class="proxy-card">
+    <h4>🌐 HTTP/HTTPS 代理</h4>
+    <ul>
+      <li>工作在<strong>应用层</strong>（更上层）</li>
+      <li>只支持 <strong>HTTP/HTTPS</strong> 协议</li>
+      <li>能理解 HTTP 请求，可以做缓存/过滤</li>
+      <li>HTTPS 通过 CONNECT 方法隧道转发</li>
+      <li>兼容性好，几乎所有软件都支持</li>
+      <li>默认端口通常：7890 或 8080</li>
+    </ul>
+  </div>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+  <text x="350" y="25" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">SOCKS5 vs HTTP 代理 — 层次对比</text>
+  
+  <!-- OSI layers (simplified) -->
+  <rect x="50" y="50" width="250" height="40" rx="6" fill="none" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="175" y="74" text-anchor="middle" fill="#bc8cff" font-size="11">应用层（HTTP, FTP, DNS...）</text>
+  
+  <rect x="50" y="100" width="250" height="40" rx="6" fill="none" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="175" y="124" text-anchor="middle" fill="#3fb950" font-size="11">传输层（TCP / UDP）</text>
+  
+  <rect x="50" y="150" width="250" height="40" rx="6" fill="none" stroke="#8b949e" stroke-width="1"/>
+  <text x="175" y="174" text-anchor="middle" fill="#8b949e" font-size="11">网络层（IP）</text>
+  
+  <!-- HTTP Proxy bracket -->
+  <path d="M310 55 L330 55 L330 85 L310 85" fill="none" stroke="#d29922" stroke-width="2"/>
+  <text x="400" y="75" fill="#d29922" font-size="11">← HTTP 代理在这里工作</text>
+  <text x="410" y="90" fill="#8b949e" font-size="9">只理解 HTTP 协议</text>
+  
+  <!-- SOCKS5 bracket -->
+  <path d="M310 105 L330 105 L330 135 L310 135" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="400" y="125" fill="#3fb950" font-size="11">← SOCKS5 在这里工作</text>
+  <text x="410" y="140" fill="#8b949e" font-size="9">转发任意 TCP/UDP 流量</text>
+  
+  <!-- Practical examples -->
+  <text x="350" y="210" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="bold">实际使用场景</text>
+  
+  <rect x="40" y="225" width="200" height="60" rx="8" fill="none" stroke="#d29922" stroke-width="1"/>
+  <text x="140" y="248" text-anchor="middle" fill="#d29922" font-size="10" font-weight="bold">适合 HTTP 代理的</text>
+  <text x="140" y="268" text-anchor="middle" fill="#8b949e" font-size="9">浏览器、下载工具、API调试</text>
+  <text x="140" y="282" text-anchor="middle" fill="#8b949e" font-size="9">npm/pip 等包管理器</text>
+  
+  <rect x="260" y="225" width="200" height="60" rx="8" fill="none" stroke="#3fb950" stroke-width="1"/>
+  <text x="360" y="248" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="bold">适合 SOCKS5 的</text>
+  <text x="360" y="268" text-anchor="middle" fill="#8b949e" font-size="9">游戏、P2P、SSH隧道</text>
+  <text x="360" y="282" text-anchor="middle" fill="#8b949e" font-size="9">需要 UDP 支持的应用</text>
+  
+  <rect x="480" y="225" width="200" height="60" rx="8" fill="none" stroke="#58a6ff" stroke-width="1"/>
+  <text x="580" y="248" text-anchor="middle" fill="#58a6ff" font-size="10" font-weight="bold">两者都行的</text>
+  <text x="580" y="268" text-anchor="middle" fill="#8b949e" font-size="9">大部分日常网页浏览</text>
+  <text x="580" y="282" text-anchor="middle" fill="#8b949e" font-size="9">Git、curl 等工具</text>
+</svg>
+</div>
+
+<h3>🤔 到底该配哪一个？</h3>
+
+<div class="card success">
+  <h3>✅ 简单结论</h3>
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>场景</th>
+        <th>推荐配置</th>
+        <th>原因</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>浏览器</td>
+        <td>SOCKS5 或 HTTP 都行</td>
+        <td>浏览器两种都支持很好</td>
+      </tr>
+      <tr>
+        <td>终端工具（curl/wget/git）</td>
+        <td>HTTP 代理优先</td>
+        <td>终端环境变量 http_proxy 是最通用的</td>
+      </tr>
+      <tr>
+        <td>npm / pip / apt</td>
+        <td>HTTP 代理</td>
+        <td>包管理器通常只支持 HTTP 代理</td>
+      </tr>
+      <tr>
+        <td>游戏 / 语音软件</td>
+        <td>SOCKS5</td>
+        <td>需要 UDP 支持，HTTP 代理不行</td>
+      </tr>
+      <tr>
+        <td>Telegram / Discord</td>
+        <td>SOCKS5 优先</td>
+        <td>这些软件的SOCKS5支持更完善</td>
+      </tr>
+      <tr>
+        <td>不确定 / 通用配置</td>
+        <td><strong>两个都配</strong></td>
+        <td>让软件自动选择最合适的</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card info">
+  <h3>💡 最佳实践：两个都配！</h3>
+  <p>大多数代理客户端（Clash、V2Ray等）会<strong>同时提供</strong> SOCKS5 和 HTTP 两种端口。例如：</p>
+  <ul style="margin-left:20px;">
+    <li>SOCKS5 → <span class="keyword">127.0.0.1:1080</span></li>
+    <li>HTTP → <span class="keyword">127.0.0.1:7890</span></li>
+  </ul>
+  <p style="margin-top:10px;">当一个软件让你配置代理时：</p>
+  <ol style="margin-left:20px;">
+    <li>如果它<strong>同时有</strong> SOCKS5 和 HTTP 两个选项 → <strong>两个都填</strong>（各填各的端口）</li>
+    <li>如果只有一个选项 → 看它支持什么就填什么</li>
+    <li>如果是终端/命令行工具 → 优先设置 HTTP 代理（兼容性最好）</li>
+    <li>如果是需要 UDP 的应用 → 必须用 SOCKS5</li>
+  </ol>
+</div>
+
+<div class="card analogy">
+  <h3>🎯 一句话记忆法</h3>
+  <p><strong>HTTP 代理</strong>像 "专门送网页快递的" — 大部分日常工具都认它</p>
+  <p><strong>SOCKS5 代理</strong>像 "什么都送的万能快递" — 更强大，但不是所有软件都知道怎么用它</p>
+  <p style="margin-top:10px;color:var(--accent);"><strong>能配两个就两个都配，让软件自己选择走哪条路！</strong></p>
+</div>
+
+<h3>HTTP 代理 和 HTTPS 代理 有什么区别？</h3>
+<div class="card info">
+  <p>容易混淆的点：</p>
+  <ul style="margin-left:20px;">
+    <li><strong>"HTTP 代理"</strong> 是代理类型的名字——它可以代理 HTTP 和 HTTPS 流量</li>
+    <li>当代理 HTTPS 流量时，用的是 <span class="keyword">CONNECT</span> 方法建立隧道，不解密内容</li>
+    <li>所以你在软件里看到 "HTTP代理" 的设置项，填进去以后它<strong>也能代理 HTTPS 网站</strong></li>
+    <li>不用担心"我填了 HTTP 代理是不是只能访问 HTTP 网站"——不是的！</li>
+  </ul>
+</div>
+</section>
+
+<!-- Footer -->
+<div style="margin-top:60px;padding:30px 0;border-top:1px solid var(--border);text-align:center;color:var(--text-secondary);font-size:13px;">
+  <p>📚 本教程基于不良林 YouTube 视频整理，仅供技术学习参考。</p>
+  <p style="margin-top:8px;">请遵守当地法律法规。技术本身是中立的，关键在于如何使用。</p>
+</div>
+
+</div><!-- end main-content -->
+
+<script>
+// ========== Theme Toggle ==========
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.querySelector('.theme-toggle');
+  if (html.getAttribute('data-theme') === 'dark') {
+    html.setAttribute('data-theme', 'light');
+    btn.textContent = '☀️';
+  } else {
+    html.setAttribute('data-theme', 'dark');
+    btn.textContent = '🌙';
+  }
+}
+
+// ========== Sidebar Toggle (Mobile) ==========
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// Close sidebar when clicking a link on mobile
+document.querySelectorAll('.sidebar nav a').forEach(link => {
+  link.addEventListener('click', () => {
+    if (window.innerWidth <= 900) {
+      document.getElementById('sidebar').classList.remove('open');
+    }
+  });
+});
+
+// ========== Scroll Tracking for Sidebar ==========
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.sidebar nav a');
+
+function updateActiveLink() {
+  let current = '';
+  sections.forEach(section => {
+    const sectionTop = section.offsetTop - 100;
+    if (window.scrollY >= sectionTop) {
+      current = section.getAttribute('id');
+    }
+  });
+  navLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) {
+      link.classList.add('active');
+    }
+  });
+}
+window.addEventListener('scroll', updateActiveLink);
+updateActiveLink();
+
+// ========== TLS Handshake Steps Animation ==========
+let currentStep = 1;
+const totalSteps = 5;
+
+function updateSteps() {
+  document.querySelectorAll('.tls-step').forEach(step => {
+    const stepNum = parseInt(step.getAttribute('data-step'));
+    if (stepNum <= currentStep) {
+      step.classList.add('active');
+    } else {
+      step.classList.remove('active');
+    }
+  });
+}
+
+function nextStep() {
+  if (currentStep < totalSteps) {
+    currentStep++;
+    updateSteps();
+  }
+}
+
+function prevStep() {
+  if (currentStep > 1) {
+    currentStep--;
+    updateSteps();
+  }
+}
+
+function resetSteps() {
+  currentStep = 1;
+  updateSteps();
+}
+
+// ========== Quiz Answer Reveal ==========
+function showAnswer(id) {
+  const answerEl = document.getElementById(id);
+  answerEl.classList.toggle('show');
+}
+
+// ========== Smooth scroll polyfill for older browsers ==========
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', function(e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+});
+</script>
+</body>
+</html>
