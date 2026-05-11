@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sight Words 乐园 🌈</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Baloo 2", cursive, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: linear-gradient(135deg, #ffe9f3 0%, #e0f7ff 50%, #fff9d9 100%);
+    background-size: 300% 300%;
+    animation: bgShift 15s ease infinite;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  @keyframes bgShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Floating background clouds/balloons */
+  .floaty {
+    position: absolute;
+    font-size: 48px;
+    opacity: 0.7;
+    animation: float 12s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0) rotate(0); }
+    50%     { transform: translateY(-30px) rotate(8deg); }
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 10px;
+    z-index: 2;
+  }
+  header h1 {
+    font-size: clamp(28px, 5vw, 52px);
+    color: #ff4f91;
+    text-shadow: 3px 3px 0 #fff, 5px 5px 0 rgba(0,0,0,0.1);
+    letter-spacing: 2px;
+  }
+  header p {
+    font-size: clamp(14px, 2vw, 20px);
+    color: #5b6cff;
+    margin-top: 4px;
+  }
+
+  /* Star score */
+  .score {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: #fff;
+    border-radius: 999px;
+    padding: 10px 20px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    font-size: 22px;
+    color: #ff8800;
+    z-index: 5;
+    border: 3px solid #ffd54a;
+  }
+  .score .pop { display: inline-block; animation: pop 0.5s ease; }
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.6) rotate(20deg); }
+    100% { transform: scale(1); }
+  }
+
+  /* Word card */
+  .card {
+    position: relative;
+    width: min(90vw, 620px);
+    background: #fff;
+    border-radius: 40px;
+    padding: 50px 30px 40px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15), inset 0 0 0 6px #fff0f6;
+    text-align: center;
+    z-index: 2;
+  }
+
+  .emoji {
+    font-size: clamp(70px, 12vw, 120px);
+    margin-bottom: 10px;
+    display: inline-block;
+    animation: wiggle 2s ease-in-out infinite;
+    cursor: pointer;
+  }
+  @keyframes wiggle {
+    0%,100% { transform: rotate(-5deg); }
+    50%     { transform: rotate(5deg); }
+  }
+
+  .word {
+    font-size: clamp(72px, 14vw, 160px);
+    font-weight: 900;
+    color: #ff4f91;
+    letter-spacing: 6px;
+    text-shadow: 4px 4px 0 #ffd54a, 8px 8px 0 rgba(0,0,0,0.08);
+    margin: 10px 0 6px;
+    cursor: pointer;
+    display: inline-block;
+    transition: transform 0.2s;
+  }
+  .word:hover { transform: scale(1.05); }
+  .word.letter-hover span:hover {
+    color: #5b6cff;
+    transform: translateY(-10px) scale(1.2);
+    display: inline-block;
+    transition: all 0.2s;
+  }
+  .word span {
+    display: inline-block;
+    transition: all 0.3s;
+  }
+  .word span.jump {
+    animation: jump 0.5s ease;
+    color: #5b6cff;
+  }
+  @keyframes jump {
+    0%   { transform: translateY(0); }
+    50%  { transform: translateY(-30px) scale(1.3); }
+    100% { transform: translateY(0); }
+  }
+
+  .hint {
+    font-size: clamp(16px, 2.2vw, 22px);
+    color: #888;
+    margin-top: 6px;
+  }
+
+  /* Buttons */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 26px;
+  }
+  button.action {
+    font-family: inherit;
+    font-size: clamp(16px, 2vw, 22px);
+    font-weight: bold;
+    padding: 14px 24px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.15);
+    transition: transform 0.15s, box-shadow 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  button.action:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.15);
+  }
+  .btn-say    { background: #5b6cff; }
+  .btn-spell  { background: #ff8a3d; }
+  .btn-prev   { background: #8bc34a; }
+  .btn-next   { background: #ff4f91; }
+  .btn-quiz   { background: #ab47bc; }
+
+  /* Quiz panel */
+  .quiz {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.95);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 20px;
+  }
+  .quiz.active { display: flex; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .quiz h2 {
+    font-size: clamp(24px, 4vw, 40px);
+    color: #5b6cff;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+  .quiz .target {
+    font-size: clamp(20px, 3vw, 28px);
+    color: #555;
+    margin-bottom: 20px;
+  }
+  .quiz .target b {
+    color: #ff4f91;
+    font-size: 1.4em;
+  }
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    width: min(90vw, 560px);
+  }
+  .choice {
+    background: #fff;
+    border: 4px solid #ffd54a;
+    border-radius: 24px;
+    padding: 22px 10px;
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 900;
+    color: #5b6cff;
+    cursor: pointer;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.1);
+    transition: transform 0.15s;
+  }
+  .choice:hover { transform: translateY(-4px); }
+  .choice.correct {
+    background: #c8f7c5;
+    border-color: #4caf50;
+    animation: correctPulse 0.6s;
+  }
+  .choice.wrong {
+    background: #ffd6d6;
+    border-color: #f44336;
+    animation: shake 0.4s;
+  }
+  @keyframes correctPulse {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.15); }
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-10px); }
+    75%     { transform: translateX(10px); }
+  }
+
+  .quiz-close {
+    position: absolute;
+    top: 20px; right: 20px;
+    font-size: 30px;
+    background: #ff4f91;
+    color: #fff;
+    border: none;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.15);
+  }
+
+  /* Celebration */
+  .confetti {
+    position: fixed;
+    width: 12px; height: 12px;
+    top: -20px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 20;
+    animation: fall linear forwards;
+  }
+  @keyframes fall {
+    to { transform: translateY(110vh) rotate(720deg); }
+  }
+
+  .big-feedback {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: clamp(60px, 12vw, 140px);
+    font-weight: 900;
+    color: #ff4f91;
+    text-shadow: 4px 4px 0 #fff, 6px 6px 0 #ffd54a;
+    z-index: 30;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(.34,1.56,.64,1), opacity 0.4s;
+    opacity: 0;
+  }
+  .big-feedback.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
+  @media (max-width: 500px) {
+    .card { padding: 30px 18px; border-radius: 28px; }
+    button.action { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Floating background decorations -->
+<div class="floaty" style="top:10%; left:5%; animation-delay:0s;">🎈</div>
+<div class="floaty" style="top:70%; left:8%; animation-delay:2s;">⭐</div>
+<div class="floaty" style="top:20%; right:8%; animation-delay:1s;">🌈</div>
+<div class="floaty" style="top:75%; right:5%; animation-delay:3s;">🦋</div>
+<div class="floaty" style="top:45%; left:2%; animation-delay:4s;">☁️</div>
+<div class="floaty" style="top:5%; right:25%; animation-delay:2.5s;">🌸</div>
+
+<div class="score">⭐ <span id="stars">0</span></div>
+
+<header>
+  <h1>🌟 Sight Words 乐园 🌟</h1>
+  <p>点一下单词听发音！点一下字母让它跳舞！</p>
+</header>
+
+<div class="card">
+  <div class="emoji" id="emoji" title="点我！">🐻</div>
+  <div class="word" id="word"></div>
+  <div class="hint" id="hint">点击单词听我读 👆</div>
+
+  <div class="controls">
+    <button class="action btn-say"   onclick="sayWord()">🔊 读一读</button>
+    <button class="action btn-spell" onclick="spellWord()">🔤 拼一拼</button>
+    <button class="action btn-prev"  onclick="prevWord()">⬅️ 上一个</button>
+    <button class="action btn-next"  onclick="nextWord()">下一个 ➡️</button>
+    <button class="action btn-quiz"  onclick="openQuiz()">🎯 小游戏</button>
+  </div>
+</div>
+
+<!-- Quiz overlay -->
+<div class="quiz" id="quiz">
+  <button class="quiz-close" onclick="closeQuiz()">✕</button>
+  <h2>🎯 找一找！</h2>
+  <div class="target">请找出：<b id="quizTarget">—</b> <span id="quizEmoji">🎈</span></div>
+  <div class="choices" id="choices"></div>
+</div>
+
+<div class="big-feedback" id="feedback"></div>
+
+<script>
+  /* ---------------- Data ---------------- */
+  // Dolch Pre-K & Kindergarten sight words, with a fun emoji + little example
+  const WORDS = [
+    { w: "I",    e: "👦",  s: "I am happy!" },
+    { w: "a",    e: "🍎",  s: "a red apple" },
+    { w: "the",  e: "🐶",  s: "the cute dog" },
+    { w: "is",   e: "☀️",  s: "Sun is bright" },
+    { w: "go",   e: "🏃",  s: "Let's go!" },
+    { w: "see",  e: "👀",  s: "I see you!" },
+    { w: "my",   e: "🧸",  s: "my teddy bear" },
+    { w: "it",   e: "⚽",  s: "Kick it!" },
+    { w: "to",   e: "🏫",  s: "go to school" },
+    { w: "like", e: "❤️",  s: "I like ice cream" },
+    { w: "you",  e: "🙋",  s: "I love you!" },
+    { w: "and",  e: "🤝",  s: "you and me" },
+    { w: "can",  e: "💪",  s: "I can do it!" },
+    { w: "we",   e: "👨‍👩‍👧", s: "we are family" },
+    { w: "big",  e: "🐘",  s: "a big elephant" },
+    { w: "little",e:"🐭",  s: "a little mouse" },
+    { w: "up",   e: "🚀",  s: "Go up!" },
+    { w: "down", e: "⬇️",  s: "Jump down!" },
+    { w: "yes",  e: "✅",  s: "Yes, please!" },
+    { w: "no",   e: "🙅",  s: "No, thank you" },
+    { w: "run",  e: "🏃‍♂️", s: "Run fast!" },
+    { w: "jump", e: "🦘",  s: "Jump high!" },
+    { w: "play", e: "🎮",  s: "Let's play!" },
+    { w: "cat",  e: "🐱",  s: "a fluffy cat" },
+    { w: "dog",  e: "🐶",  s: "a happy dog" },
+    { w: "red",  e: "🍓",  s: "red strawberry" },
+    { w: "blue", e: "🔵",  s: "blue sky" },
+    { w: "me",   e: "🙋‍♀️", s: "Look at me!" }
+  ];
+
+  /* ---------------- State ---------------- */
+  let idx = 0;
+  let stars = Number(localStorage.getItem("sw_stars") || 0);
+  const starsEl = document.getElementById("stars");
+  starsEl.textContent = stars;
+
+  const wordEl  = document.getElementById("word");
+  const emojiEl = document.getElementById("emoji");
+  const hintEl  = document.getElementById("hint");
+
+  /* ---------------- Speech ---------------- */
+  function speak(text, rate = 0.85) {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = rate;
+    u.pitch = 1.3;
+    // Try to find a child-friendly voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      /female|girl|kid|samantha|karen|zira|google us english/i.test(v.name) && /en/i.test(v.lang)
+    ) || voices.find(v => /en-US/i.test(v.lang));
+    if (preferred) u.voice = preferred;
+    window.speechSynthesis.speak(u);
+  }
+  // Preload voices
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.onvoiceschanged = () => {};
+  }
+
+  /* ---------------- Render ---------------- */
+  function render() {
+    const item = WORDS[idx];
+    // Letters as separate spans for animation
+    wordEl.innerHTML = [...item.w].map(ch => `<span>${ch}</span>`).join("");
+    emojiEl.textContent = item.e;
+    hintEl.textContent = item.s;
+    // Auto-read on every new word
+    setTimeout(() => sayWord(), 250);
+  }
+
+  /* ---------------- Actions ---------------- */
+  function sayWord() {
+    const item = WORDS[idx];
+    wordEl.style.transform = "scale(1.1)";
+    setTimeout(() => wordEl.style.transform = "scale(1)", 200);
+    speak(item.w, 0.8);
+    addStar();
+  }
+
+  function spellWord() {
+    const item = WORDS[idx];
+    const letters = [...item.w];
+    const spans = wordEl.querySelectorAll("span");
+    let i = 0;
+    // Cancel any ongoing speech queue
+    window.speechSynthesis.cancel();
+    function step() {
+      if (i >= letters.length) {
+        // Finally read the whole word
+        setTimeout(() => speak(item.w, 0.8), 400);
+        return;
+      }
+      spans[i].classList.add("jump");
+      speak(letters[i], 0.7);
+      setTimeout(() => spans[i].classList.remove("jump"), 500);
+      i++;
+      setTimeout(step, 700);
+    }
+    step();
+  }
+
+  function nextWord() {
+    idx = (idx + 1) % WORDS.length;
+    render();
+  }
+  function prevWord() {
+    idx = (idx - 1 + WORDS.length) % WORDS.length;
+    render();
+  }
+
+  /* Click letters to make them jump */
+  wordEl.addEventListener("click", (e) => {
+    if (e.target.tagName === "SPAN") {
+      e.target.classList.add("jump");
+      speak(e.target.textContent, 0.7);
+      setTimeout(() => e.target.classList.remove("jump"), 500);
+    } else {
+      sayWord();
+    }
+  });
+
+  /* Click emoji -> read the example sentence */
+  emojiEl.addEventListener("click", () => {
+    const item = WORDS[idx];
+    speak(item.s, 0.85);
+    emojiEl.style.transform = "scale(1.3) rotate(15deg)";
+    setTimeout(() => emojiEl.style.transform = "", 300);
+  });
+
+  /* Keyboard navigation */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") nextWord();
+    else if (e.key === "ArrowLeft") prevWord();
+    else if (e.key === " ") { e.preventDefault(); sayWord(); }
+  });
+
+  /* ---------------- Stars / Rewards ---------------- */
+  function addStar() {
+    stars++;
+    starsEl.textContent = stars;
+    starsEl.classList.remove("pop");
+    void starsEl.offsetWidth;
+    starsEl.classList.add("pop");
+    localStorage.setItem("sw_stars", stars);
+    if (stars % 10 === 0) celebrate("太棒了！🎉");
+  }
+
+  function celebrate(text = "做得好！⭐") {
+    showFeedback(text);
+    confetti();
+  }
+
+  function showFeedback(text) {
+    const fb = document.getElementById("feedback");
+    fb.textContent = text;
+    fb.classList.add("show");
+    setTimeout(() => fb.classList.remove("show"), 1200);
+  }
+
+  function confetti(count = 60) {
+    const colors = ["#ff4f91","#5b6cff","#ffd54a","#8bc34a","#ab47bc","#ff8a3d","#29b6f6"];
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.animationDuration = (1.5 + Math.random() * 1.5) + "s";
+      c.style.transform = `rotate(${Math.random() * 360}deg)`;
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 3500);
+    }
+  }
+
+  /* ---------------- Quiz ---------------- */
+  const quizEl     = document.getElementById("quiz");
+  const choicesEl  = document.getElementById("choices");
+  const quizTarget = document.getElementById("quizTarget");
+  const quizEmoji  = document.getElementById("quizEmoji");
+  let quizAnswer = "";
+
+  function openQuiz() {
+    buildQuiz();
+    quizEl.classList.add("active");
+  }
+  function closeQuiz() {
+    quizEl.classList.remove("active");
+  }
+  function buildQuiz() {
+    // Pick a random target
+    const target = WORDS[Math.floor(Math.random() * WORDS.length)];
+    quizAnswer = target.w;
+    quizTarget.textContent = target.w;
+    quizEmoji.textContent = target.e;
+
+    // 3 distractors + 1 correct
+    const pool = WORDS.filter(x => x.w !== target.w);
+    const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    const options = [...shuffled.map(x => x.w), target.w].sort(() => Math.random() - 0.5);
+
+    choicesEl.innerHTML = "";
+    options.forEach(opt => {
+      const b = document.createElement("button");
+      b.className = "choice";
+      b.textContent = opt;
+      b.onclick = () => pickChoice(b, opt);
+      choicesEl.appendChild(b);
+    });
+
+    // Read the target
+    setTimeout(() => speak("Find the word... " + target.w, 0.8), 300);
+  }
+  function pickChoice(btn, value) {
+    if (value === quizAnswer) {
+      btn.classList.add("correct");
+      speak("Great job! " + quizAnswer, 0.9);
+      addStar(); addStar(); addStar();
+      celebrate("做对啦！🌟");
+      setTimeout(buildQuiz, 1400);
+    } else {
+      btn.classList.add("wrong");
+      speak("Try again!", 0.9);
+      setTimeout(() => btn.classList.remove("wrong"), 600);
+    }
+  }
+
+  /* ---------------- Init ---------------- */
+  render();
+</script>
+
+</body>
+</html>
